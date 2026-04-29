@@ -42,7 +42,7 @@ function render() {
   return renderAdmin(mentor);
 }
 
-// -------- LOGIN --------
+// -------- TELA DE LOGIN --------
 function renderLogin() {
   let mode = "login";
   draw();
@@ -52,8 +52,8 @@ function renderLogin() {
       <div class="center-screen">
         <div class="card">
           <div class="brand">
-            <div class="brand-icon">SH</div>
-            <h1>Study Hub</h1>
+            <div class="brand-icon">img</div>
+            <h1>Primeira Chamada MED</h1>
             <p>${mode === "login" ? "Entre com sua conta" : "Crie sua conta de mentor"}</p>
           </div>
           <div class="tab-toggle">

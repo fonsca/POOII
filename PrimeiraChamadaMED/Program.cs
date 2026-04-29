@@ -258,7 +258,7 @@ app.MapDelete("/api/planner/{itemId:long}", (long itemId) =>
     return Results.NoContent();
 });
 
-app.Run();
+app.Run("http://localhost:5000");
 
 record RegisterDto(string Name, string Email, string Password);
 record LoginDto(string Email, string Password);

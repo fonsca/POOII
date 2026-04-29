@@ -56,14 +56,7 @@ function renderLogin() {
             <h1>Primeira Chamada MED</h1>
             <p>${mode === "login" ? "Entre com sua conta" : "Crie sua conta de mentor"}</p>
           </div>
-          <div class="tab-toggle">
-            <button id="tab-login" class="${mode === "login" ? "active" : ""}">Entrar</button>
-            <button id="tab-register" class="${mode === "register" ? "active" : ""}">Cadastrar</button>
-          </div>
           <form id="auth-form">
-            ${mode === "register" ? `
-              <div class="field"><label>Nome</label><input name="name" required /></div>
-            ` : ""}
             <div class="field"><label>E-mail</label><input name="email" type="email" required /></div>
             <div class="field"><label>Senha</label><input name="password" type="password" required minlength="4" /></div>
             <button type="submit" class="btn">${mode === "login" ? "Entrar" : "Cadastrar"}</button>

@@ -30,7 +30,7 @@ app.MapPost("/api/auth/login", (LoginRequest req) => {
         var command = connection.CreateCommand();
         command.CommandText = "SELECT nome, tipo_usuario FROM USUARIO WHERE email = $email AND senha = $senha";
         command.Parameters.AddWithValue("$email", req.email ?? "");
-        command.Parameters.AddWithValue("$senha", req.senha ?? "");
+        command.Parameters.AddWithValue("$senha", req.password ?? "");
 
         using var reader = command.ExecuteReader();
         if (reader.Read()) {
@@ -54,4 +54,4 @@ app.MapPost("/api/auth/login", (LoginRequest req) => {
 
 app.Run("http://localhost:5000");
 
-record LoginRequest(string email, string senha);
+record LoginRequest(string email, string password);

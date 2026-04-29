@@ -44,25 +44,33 @@ function render() {
 
 // -------- TELA DE LOGIN --------
 function renderLogin() {
-  // 1. Inserção direta do HTML (sem os ternários e sem a variável mode)
   root.innerHTML = `
     <div class="center-screen">
-      <div class="card">
+      <div class="card login-card">
+        <span class="gold-ribbon" aria-hidden="true"></span>
         <div class="brand">
-          <div class="brand-icon">img</div>
-          <h1>Primeira Chamada MED</h1>
-          <p>Entre com sua conta</p>
+          <div class="brand-icon">
+            <img src="/dist/src/img/lg.png">
+            <span class="brand-icon-dot" aria-hidden="true"></span>
+          </div>
+          <h1>Primeira Chamada <span class="gold-text">MED</span></h1>
+          <p>Entre com sua <span class="gold-underline">conta</span></p>
         </div>
         <form id="auth-form">
-          <div class="field"><label>E-mail</label><input name="email" type="email" required /></div>
-          <div class="field"><label>Senha</label><input name="password" type="password" required minlength="4" /></div>
+          <div class="field">
+            <label>E-mail <span class="gold-text">★</span></label>
+            <input name="email" type="email" required placeholder="Ex.: aluno@med.com" />
+          </div>
+          <div class="field">
+            <label>Senha <span class="gold-text">★</span></label>
+            <input name="password" type="password" required minlength="4" placeholder="Ex.: med2024" />
+          </div>
           <button type="submit" class="btn">Entrar</button>
           <p id="msg" class="error"></p>
         </form>
       </div>
     </div>`;
 
-  // 2. Lógica de envio do formulário focada apenas no Login
   document.getElementById("auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -71,17 +79,14 @@ function renderLogin() {
     msg.textContent = "";
 
     try {
-      // Rota fixa para o login
       const m = await api("/auth/login", {
-        method: "POST", 
+        method: "POST",
         body: JSON.stringify(payload),
       });
-      
+
       setMentor(m);
       navigate("#/admin");
-      
     } catch (err) {
-      // Mensagem de erro exclusiva para falha de login
       msg.textContent = err.message || "E-mail ou senha inválidos.";
     }
   });

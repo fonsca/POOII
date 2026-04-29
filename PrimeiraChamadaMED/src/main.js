@@ -44,45 +44,47 @@ function render() {
 
 // -------- TELA DE LOGIN --------
 function renderLogin() {
-  let mode = "login";
-  draw();
-
-  function draw() {
-    root.innerHTML = `
-      <div class="center-screen">
-        <div class="card">
-          <div class="brand">
-            <div class="brand-icon">img</div>
-            <h1>Primeira Chamada MED</h1>
-            <p>${mode === "login" ? "Entre com sua conta" : "Crie sua conta de mentor"}</p>
-          </div>
-          <form id="auth-form">
-            <div class="field"><label>E-mail</label><input name="email" type="email" required /></div>
-            <div class="field"><label>Senha</label><input name="password" type="password" required minlength="4" /></div>
-            <button type="submit" class="btn">${mode === "login" ? "Entrar" : "Cadastrar"}</button>
-            <p id="msg" class="error"></p>
-          </form>
+  // 1. Inserção direta do HTML (sem os ternários e sem a variável mode)
+  root.innerHTML = `
+    <div class="center-screen">
+      <div class="card">
+        <div class="brand">
+          <div class="brand-icon">img</div>
+          <h1>Primeira Chamada MED</h1>
+          <p>Entre com sua conta</p>
         </div>
-      </div>`;
-    document.getElementById("tab-login").onclick = () => { mode = "login"; draw(); };
-    document.getElementById("tab-register").onclick = () => { mode = "register"; draw(); };
-    document.getElementById("auth-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const payload = Object.fromEntries(fd);
-      const msg = document.getElementById("msg");
-      msg.textContent = "";
-      try {
-        const m = await api(`/auth/${mode === "login" ? "login" : "register"}`, {
-          method: "POST", body: JSON.stringify(payload),
-        });
-        setMentor(m);
-        navigate("#/admin");
-      } catch (err) {
-        msg.textContent = mode === "login" ? "E-mail ou senha inválidos." : (err.message || "Erro ao cadastrar.");
-      }
-    });
-  }
+        <form id="auth-form">
+          <div class="field"><label>E-mail</label><input name="email" type="email" required /></div>
+          <div class="field"><label>Senha</label><input name="password" type="password" required minlength="4" /></div>
+          <button type="submit" class="btn">Entrar</button>
+          <p id="msg" class="error"></p>
+        </form>
+      </div>
+    </div>`;
+
+  // 2. Lógica de envio do formulário focada apenas no Login
+  document.getElementById("auth-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = Object.fromEntries(fd);
+    const msg = document.getElementById("msg");
+    msg.textContent = "";
+
+    try {
+      // Rota fixa para o login
+      const m = await api("/auth/login", {
+        method: "POST", 
+        body: JSON.stringify(payload),
+      });
+      
+      setMentor(m);
+      navigate("#/admin");
+      
+    } catch (err) {
+      // Mensagem de erro exclusiva para falha de login
+      msg.textContent = err.message || "E-mail ou senha inválidos.";
+    }
+  });
 }
 
 // -------- ADMIN --------

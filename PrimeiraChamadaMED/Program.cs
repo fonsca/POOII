@@ -74,24 +74,6 @@ using (var conn = new SqliteConnection(ConnStr))
 SqliteConnection Open() { var c = new SqliteConnection(ConnStr); c.Open(); return c; }
 
 // ---------- AUTH ----------
-app.MapPost("/api/auth/register", (RegisterDto dto) =>
-{
-    if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password) || string.IsNullOrWhiteSpace(dto.Name))
-        return Results.BadRequest(new { error = "Preencha nome, e-mail e senha." });
-    using var c = Open();
-    var check = c.CreateCommand(); check.CommandText = "SELECT 1 FROM Users WHERE Email=@e"; check.Parameters.AddWithValue("@e", dto.Email);
-    if (check.ExecuteScalar() != null) return Results.Conflict(new { error = "E-mail já cadastrado." });
-    var hash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
-    var ins = c.CreateCommand();
-    ins.CommandText = "INSERT INTO Users (Email,PasswordHash,Name,Role,CreatedAt) VALUES (@e,@h,@n,'mentor',@d); SELECT last_insert_rowid();";
-    ins.Parameters.AddWithValue("@e", dto.Email);
-    ins.Parameters.AddWithValue("@h", hash);
-    ins.Parameters.AddWithValue("@n", dto.Name);
-    ins.Parameters.AddWithValue("@d", DateTime.UtcNow.ToString("o"));
-    var id = (long)ins.ExecuteScalar()!;
-    return Results.Ok(new { id, email = dto.Email, name = dto.Name, role = "mentor" });
-});
-
 app.MapPost("/api/auth/login", (LoginDto dto) =>
 {
     using var c = Open();
@@ -105,7 +87,7 @@ app.MapPost("/api/auth/login", (LoginDto dto) =>
     return Results.Ok(new { id, email = dto.Email, name, role });
 });
 
-// ---------- STUDENTS ----------
+// ---------- LISTAR ALUNOS DO MENTOR ----------
 app.MapGet("/api/students", (long mentorId) =>
 {
     using var c = Open();
@@ -125,6 +107,7 @@ app.MapGet("/api/students", (long mentorId) =>
     return Results.Ok(list);
 });
 
+// ---------- CADASTRAR NOVO ALUNO ----------
 app.MapPost("/api/students", (StudentDto dto) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Course))
@@ -132,7 +115,6 @@ app.MapPost("/api/students", (StudentDto dto) =>
 
     using var c = Open();
 
-    // E-mail único entre Users (porque vamos criar login p/ o aluno)
     var check = c.CreateCommand();
     check.CommandText = "SELECT 1 FROM Users WHERE Email=@e";
     check.Parameters.AddWithValue("@e", dto.Email);
@@ -181,6 +163,7 @@ app.MapPost("/api/students", (StudentDto dto) =>
     }
 });
 
+// ---------- DETALHES DO ALUNO E PLANNER (VISÃO MENTOR) ----------
 app.MapGet("/api/students/{id:long}", (long id) =>
 {
     using var c = Open();
@@ -217,7 +200,32 @@ app.MapDelete("/api/students/{id:long}", (long id) =>
     return Results.NoContent();
 });
 
-// ---------- PLANNER ----------
+// ---------- MEU PLANNER (VISÃO ALUNO) ----------
+app.MapGet("/api/me/planner", (long userId) =>
+{
+    using var c = Open();
+    var s = c.CreateCommand();
+    s.CommandText = "SELECT Id,Name,Email,Course FROM Students WHERE UserId=@u";
+    s.Parameters.AddWithValue("@u", userId);
+    using var rs = s.ExecuteReader();
+    if (!rs.Read()) return Results.Ok(new { student = (object)null });
+
+    var studentId = rs.GetInt64(0);
+    var student = new { id = studentId, name = rs.GetString(1), email = rs.GetString(2), course = rs.GetString(3) };
+    rs.Close();
+
+    var p = c.CreateCommand();
+    p.CommandText = "SELECT Id,Day,Subject,Topic,Hours,Done FROM PlannerItems WHERE StudentId=@i ORDER BY Id";
+    p.Parameters.AddWithValue("@i", studentId);
+    var items = new List<object>();
+    using var rp = p.ExecuteReader();
+    while (rp.Read())
+        items.Add(new { id = rp.GetInt64(0), day = rp.GetString(1), subject = rp.GetString(2), topic = rp.GetString(3), hours = rp.GetDouble(4), done = rp.GetInt64(5) == 1 });
+
+    return Results.Ok(new { student, planner = items });
+});
+
+// ---------- MANIPULAÇÃO DE TAREFAS (PLANNER) ----------
 app.MapPost("/api/students/{id:long}/planner", (long id, PlannerDto dto) =>
 {
     using var c = Open();
@@ -260,8 +268,7 @@ app.MapDelete("/api/planner/{itemId:long}", (long itemId) =>
 
 app.Run("http://localhost:5000");
 
-record RegisterDto(string Name, string Email, string Password);
+// ---------- MOLDES DE DADOS (DTOS) ----------
 record LoginDto(string Email, string Password);
-record StudentDto(long MentorId, string Name, string Email, string Course,
-                  string? Phone, string? BirthDate, string? Notes, string? InitialPassword);
+record StudentDto(long MentorId, string Name, string Email, string Course, string? Phone, string? BirthDate, string? Notes, string? InitialPassword);
 record PlannerDto(string Day, string Subject, string Topic, double Hours, bool Done);

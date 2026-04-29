@@ -19,8 +19,13 @@ async function api(path, opts = {}) {
   });
   if (!res.ok) {
     const text = await res.text();
-    try { const j = JSON.parse(text); throw new Error(j.error || res.statusText); }
-    catch (e) { throw new Error(text || res.statusText); }
+    try {
+      const j = JSON.parse(text);
+      throw new Error(j.error || j.mensagem || res.statusText);
+    } catch (e) {
+      if (e instanceof SyntaxError) throw new Error(text || res.statusText);
+      throw e;
+    }
   }
   if (res.status === 204) return undefined;
   return res.json();
@@ -38,9 +43,10 @@ function render() {
 
   if (hash.startsWith("#/login")) return renderLogin();
 
-  // aluno: só vê a tela de boas-vindas por enquanto
+  // aluno: vê apenas a área dele
   if (user.role === "student") return renderStudentHome(user);
 
+  // mentor / admin
   if (hash.startsWith("#/admin/novo-aluno")) return renderNewStudent(user);
   if (hash.startsWith("#/admin/aluno/")) {
     const id = Number(hash.split("/").pop());
@@ -70,6 +76,9 @@ function renderLogin() {
           </div>
           <button type="submit" class="btn">Entrar</button>
           <p id="msg" class="error"></p>
+          <p class="muted" style="margin-top:1rem;font-size:.85rem;text-align:center">
+            Admin padrão: <b>admin@teste.com</b> / <b>123456</b>
+          </p>
         </form>
       </div>
     </div>`;
@@ -94,17 +103,66 @@ function renderLogin() {
   });
 }
 
-// -------- HOME DO ALUNO (placeholder) --------
-function renderStudentHome(user) {
+// -------- HOME DO ALUNO (vê o próprio planner) --------
+async function renderStudentHome(user) {
   root.innerHTML = headerHtml(user) + `
     <main class="container">
-      <section class="section" style="text-align:center;padding:3rem 2rem">
-        <img src="img/lg.png" alt="Primeira Chamada MED" style="max-width:160px;margin:0 auto 1.5rem;display:block" />
-        <h1 style="color:var(--navy);margin-bottom:.5rem">Bem vindo, Aluno!</h1>
-        <p class="muted">Sua área de estudos estará disponível em breve.</p>
+      <section class="section">
+        <div class="row">
+          <div style="display:flex;gap:1rem;align-items:center">
+            <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">${initials(user.name)}</div>
+            <div>
+              <h2 style="margin:0">Olá, ${user.name}!</h2>
+              <div class="muted" id="student-sub">Carregando seu planner...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2 style="color:var(--navy);margin-bottom:1rem">Meu planner semanal</h2>
+        <div id="planner"><div class="empty">Carregando...</div></div>
       </section>
     </main>`;
   bindHeader();
+
+  try {
+    const data = await api(`/me/planner?userId=${user.id}`);
+    const sub = document.getElementById("student-sub");
+    const plannerEl = document.getElementById("planner");
+
+    if (!data.student) {
+      sub.textContent = "Seu mentor ainda não vinculou um plano de estudos.";
+      plannerEl.innerHTML = `<div class="empty">Nenhum planner disponível ainda.</div>`;
+      return;
+    }
+
+    sub.textContent = `${data.student.email} · ${data.student.course}`;
+    const planner = data.planner;
+    plannerEl.innerHTML = planner.length ? planner.map(p => `
+      <div class="planner-item ${p.done ? "done" : ""}">
+        <button class="checkbox ${p.done ? "checked" : ""}" data-toggle="${p.id}">${p.done ? "✓" : ""}</button>
+        <div class="meta">
+          <span>📅 ${p.day}</span>
+          <b>📘 ${p.subject}</b>
+          <span style="${p.done ? 'text-decoration:line-through' : ''}">${p.topic}</span>
+          <span>⏱ ${p.hours}h</span>
+        </div>
+      </div>
+    `).join("") : `<div class="empty">Nenhuma tarefa no seu planner ainda.</div>`;
+
+    plannerEl.querySelectorAll("[data-toggle]").forEach(b => {
+      b.onclick = async () => {
+        const item = planner.find(p => p.id === Number(b.dataset.toggle));
+        await api(`/planner/${item.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ ...item, done: !item.done })
+        });
+        renderStudentHome(user);
+      };
+    });
+  } catch (err) {
+    document.getElementById("student-sub").textContent = "Erro ao carregar: " + err.message;
+  }
 }
 
 // -------- ADMIN (lista de alunos) --------
@@ -125,28 +183,32 @@ async function renderAdmin(mentor) {
 
   const list = document.getElementById("list");
   async function refresh() {
-    const students = await api(`/students?mentorId=${mentor.id}`);
-    list.innerHTML = students.length ? students.map(s => `
-      <article class="student-card">
-        <div class="row">
-          <div style="display:flex;gap:.75rem;align-items:center">
-            <div class="avatar">${initials(s.name)}</div>
-            <div><b>${s.name}</b><div class="muted" style="font-size:.8rem">${s.email}</div></div>
+    try {
+      const students = await api(`/students?mentorId=${mentor.id}`);
+      list.innerHTML = students.length ? students.map(s => `
+        <article class="student-card">
+          <div class="row">
+            <div style="display:flex;gap:.75rem;align-items:center">
+              <div class="avatar">${initials(s.name)}</div>
+              <div><b>${s.name}</b><div class="muted" style="font-size:.8rem">${s.email}</div></div>
+            </div>
+            <button class="btn-danger" data-del="${s.id}">✕</button>
           </div>
-          <button class="btn-danger" data-del="${s.id}">✕</button>
-        </div>
-        <div class="row"><span class="badge">${s.course}</span></div>
-        <a class="link-btn" href="#/admin/aluno/${s.id}">Ver planner →</a>
-      </article>
-    `).join("") : `<div class="empty">Nenhum aluno cadastrado ainda. Clique em <b>+ Novo aluno</b> para começar.</div>`;
+          <div class="row"><span class="badge">${s.course}</span></div>
+          <a class="link-btn" href="#/admin/aluno/${s.id}">Ver planner →</a>
+        </article>
+      `).join("") : `<div class="empty">Nenhum aluno cadastrado ainda. Clique em <b>+ Novo aluno</b> para começar.</div>`;
 
-    list.querySelectorAll("[data-del]").forEach(b => {
-      b.onclick = async () => {
-        if (!confirm("Remover aluno?")) return;
-        await api(`/students/${b.dataset.del}`, { method: "DELETE" });
-        refresh();
-      };
-    });
+      list.querySelectorAll("[data-del]").forEach(b => {
+        b.onclick = async () => {
+          if (!confirm("Remover aluno?")) return;
+          await api(`/students/${b.dataset.del}`, { method: "DELETE" });
+          refresh();
+        };
+      });
+    } catch (err) {
+      list.innerHTML = `<div class="empty">Erro ao carregar alunos: ${err.message}</div>`;
+    }
   }
   refresh();
 }
@@ -185,7 +247,7 @@ function renderNewStudent(mentor) {
     msg.textContent = "";
     const fd = new FormData(e.target);
     const payload = { mentorId: mentor.id, ...Object.fromEntries(fd) };
-    ["phone","birthDate","notes","initialPassword"].forEach(k => {
+    ["phone", "birthDate", "notes", "initialPassword"].forEach(k => {
       if (!payload[k]) delete payload[k];
     });
     try {
@@ -230,7 +292,7 @@ async function renderStudent(mentor, id) {
           <h2>Adicionar tarefa</h2>
           <form id="new-task" class="grid-form">
             <div class="field"><label>Dia</label>
-              <select name="day">${["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"].map(d=>`<option>${d}</option>`).join("")}</select>
+              <select name="day">${["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"].map(d => `<option>${d}</option>`).join("")}</select>
             </div>
             <div class="field"><label>Matéria</label><input name="subject" required /></div>
             <div class="field"><label>Tópico</label><input name="topic" required /></div>
@@ -248,7 +310,7 @@ async function renderStudent(mentor, id) {
                 <div class="meta">
                   <span>📅 ${p.day}</span>
                   <b>📘 ${p.subject}</b>
-                  <span style="${p.done?'text-decoration:line-through':''}">${p.topic}</span>
+                  <span style="${p.done ? 'text-decoration:line-through' : ''}">${p.topic}</span>
                   <span>⏱ ${p.hours}h</span>
                 </div>
                 <button class="btn-danger" data-del="${p.id}">✕</button>

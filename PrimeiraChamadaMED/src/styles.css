@@ -13,21 +13,39 @@
 }
 
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Open Sans','Segoe UI',sans-serif}
-
 body{background:var(--bg);color:var(--text);min-height:100vh}
-
 h1,h2,h3{font-family:'Montserrat','Segoe UI',sans-serif}
-
 button{cursor:pointer;border:none;font:inherit}
-
 input,select{font:inherit}
-
 .center-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;
   background:linear-gradient(135deg,#243b6b,#3457a4);padding:1rem}
-
 .card{background:var(--card);border-radius:16px;padding:2.5rem;width:100%;max-width:440px;box-shadow:var(--shadow)}
 
 /* ===== Login com detalhes dourados ===== */
+/* ---- BOTÃO MOSTRAR/OCULTAR SENHA ---- */
+.pwd-toggle-btn {
+  position: absolute;
+  right: 0.5rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.eye-img {
+  width: 22px; /* Tamanho da sua imagem PNG */
+  height: 22px;
+  object-fit: contain;
+  opacity: 0.6; /* Deixa um pouco transparente */
+  transition: opacity 0.2s;
+}
+
+.pwd-toggle-btn:hover .eye-img {
+  opacity: 1; /* Fica 100% visível ao passar o mouse */
+}
 .login-card{position:relative;overflow:hidden;border-top:4px solid var(--gold)}
 
 .gold-ribbon{position:absolute;top:-40px;right:-40px;width:120px;height:120px;
@@ -83,7 +101,134 @@ input,select{font:inherit}
 .tab-toggle button.active{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 
 
+
+
 /* --------- LAYOUT DO ADMIN --------- */
+/* ---- ESTRUTURA DO LAYOUT COM SIDEBAR ---- */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* A barra lateral (com transição para encolher) */
+.sidebar {
+  width: 260px;
+  background-color: var(--navy, #1a2530);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+  transition: width 0.3s ease, padding 0.3s ease;
+  overflow: hidden; /* Esconde os textos ao encolher */
+  position: relative;
+}
+
+/* ESTADO ENCOLHIDO da navbar*/
+.sidebar.collapsed {
+  width: 80px;
+  padding: 1.5rem 0.5rem;
+  align-items: center;
+}
+
+/* Tudo que tiver essa classe some quando a barra encolhe */
+.sidebar.collapsed .hide-on-collapse {
+  display: none !important;
+}
+
+/* O Cabeçalho da Sidebar */
+.sidebar-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 1rem;
+  width: 100%;
+}
+
+.sidebar.collapsed .sidebar-top {
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sidebar.collapsed .sidebar-brand {
+  justify-content: center;
+}
+
+/* Botão de abrir/fechar o menu */
+.toggle-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Links do menu */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex-grow: 1;
+  width: 100%;
+}
+
+.sidebar-nav a {
+  color: rgba(255,255,255,0.8);
+  text-decoration: none;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  white-space: nowrap; /* Impede o texto de quebrar de linha */
+}
+
+.sidebar-nav a:hover, .sidebar-nav a.active {
+  background-color: rgba(255,255,255,0.1);
+  color: var(--gold, #d4af37);
+}
+
+.sidebar.collapsed .sidebar-nav a {
+  justify-content: center;
+  padding: 0.75rem 0;
+}
+
+/* Rodapé */
+.sidebar-footer {
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  width: 100%;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* A área de conteúdo principal */
+.main-content {
+  flex-grow: 1;
+  background-color: #f4f7f6;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
 .app-header{background:linear-gradient(135deg,#243b6b,#3457a4);color:#fff;padding:0 1.5rem;height:64px;
   display:flex;align-items:center;justify-content:space-between}
 
@@ -147,3 +292,34 @@ input,select{font:inherit}
 /* Logo da marca */
 .brand-logo{max-width:220px;width:100%;height:auto;margin-bottom:.5rem;display:block}
 .app-header .logo .logo-img{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:8px;padding:3px}
+
+
+
+
+
+/* ---- BARRA DE PROGRESSO DO ALUNO---- */
+.progress-wrapper {
+  margin-top: 1.5rem;
+  width: 100%;
+}
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--navy, #1a2530);
+}
+.progress-track {
+  background-color: #e2e8f0; /* Fundo cinza clarinho */
+  border-radius: 10px;
+  height: 16px;
+  width: 100%;
+  overflow: hidden;
+}
+.progress-fill {
+  background-color: var(--gold, #d4af37); /* Cor da barra cheia */
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.5s ease-in-out; /* Efeito suave ao crescer */
+}

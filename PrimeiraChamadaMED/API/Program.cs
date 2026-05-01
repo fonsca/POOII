@@ -31,7 +31,7 @@ SqliteConnection OpenDb() {
     return conn;
 }
 
-// migracao automatica: cria tabelas se nao existirem (resolve erro "no such column")
+// migracao automatica: cria tabelas se nao existirem e adiciona colunas novas
 using (var db = OpenDb()) {
     var m = db.CreateCommand();
     m.CommandText = @"
@@ -50,13 +50,27 @@ using (var db = OpenDb()) {
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             id_usuario  INTEGER NOT NULL,
             day         TEXT NOT NULL,
+            time        TEXT,
             subject     TEXT NOT NULL,
             topic       TEXT NOT NULL,
+            subtopics   TEXT,
             hours       REAL NOT NULL DEFAULT 1,
             done        INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario)
         );";
     m.ExecuteNonQuery();
+
+    // Tenta adicionar as colunas novas caso a tabela seja da versão antiga (falha em silêncio se já existir)
+    void AddColumn(string table, string column, string type) {
+        try {
+            var alt = db.CreateCommand();
+            alt.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {type};";
+            alt.ExecuteNonQuery();
+        } catch { /* Ignora erro se a coluna já existir */ }
+    }
+    
+    AddColumn("PLANNER_ITEM", "time", "TEXT");
+    AddColumn("PLANNER_ITEM", "subtopics", "TEXT");
 }
 
 // POST /api/auth/login
@@ -186,18 +200,21 @@ app.MapGet("/api/students/{id:long}", (long id) => {
         sr.Close();
 
         var pc = db.CreateCommand();
-        pc.CommandText = "SELECT id, day, subject, topic, hours, done FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
+        // Lendo as colunas time (6) e subtopics (7)
+        pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
         pc.Parameters.AddWithValue("$uid", id);
         var planner = new List<object>();
         using var pr = pc.ExecuteReader();
         while (pr.Read())
             planner.Add(new {
-                id      = pr.GetInt64(0),
-                day     = pr.GetString(1),
-                subject = pr.GetString(2),
-                topic   = pr.GetString(3),
-                hours   = pr.GetDouble(4),
-                done    = pr.GetInt64(5) == 1
+                id        = pr.GetInt64(0),
+                day       = pr.GetString(1),
+                subject   = pr.GetString(2),
+                topic     = pr.GetString(3),
+                hours     = pr.GetDouble(4),
+                done      = pr.GetInt64(5) == 1,
+                time      = pr.IsDBNull(6) ? "" : pr.GetString(6),
+                subtopics = pr.IsDBNull(7) ? "" : pr.GetString(7)
             });
         return Results.Ok(new { student, planner });
     } catch (Exception ex) {
@@ -235,15 +252,19 @@ app.MapPost("/api/students/{id:long}/planner", async (long id, HttpRequest reque
 
         using var db = OpenDb();
         var ins = db.CreateCommand();
+        // Inserindo os dados com as colunas novas
         ins.CommandText = @"
-            INSERT INTO PLANNER_ITEM (id_usuario, day, subject, topic, hours, done)
-            VALUES ($uid, $day, $sub, $top, $hrs, 0);
+            INSERT INTO PLANNER_ITEM (id_usuario, day, time, subject, topic, subtopics, hours, done)
+            VALUES ($uid, $day, $time, $sub, $top, $subt, $hrs, 0);
             SELECT last_insert_rowid();";
-        ins.Parameters.AddWithValue("$uid", id);
-        ins.Parameters.AddWithValue("$day", Str("day"));
-        ins.Parameters.AddWithValue("$sub", Str("subject"));
-        ins.Parameters.AddWithValue("$top", Str("topic"));
-        ins.Parameters.AddWithValue("$hrs", Dbl("hours"));
+        ins.Parameters.AddWithValue("$uid",  id);
+        ins.Parameters.AddWithValue("$day",  Str("day"));
+        ins.Parameters.AddWithValue("$time", Str("time"));
+        ins.Parameters.AddWithValue("$sub",  Str("subject"));
+        ins.Parameters.AddWithValue("$top",  Str("topic"));
+        ins.Parameters.AddWithValue("$subt", Str("subtopics"));
+        ins.Parameters.AddWithValue("$hrs",  Dbl("hours"));
+        
         var newId = (long)ins.ExecuteScalar()!;
         return Results.Ok(new { id = newId });
     } catch (Exception ex) {
@@ -256,13 +277,44 @@ app.MapPut("/api/planner/{id:long}", async (long id, HttpRequest request) => {
     try {
         using var body = await JsonDocument.ParseAsync(request.Body);
         var root = body.RootElement;
-        bool done = root.TryGetProperty("done", out var dv) && dv.GetBoolean();
+        
         using var db = OpenDb();
         var cmd = db.CreateCommand();
-        cmd.CommandText = "UPDATE PLANNER_ITEM SET done = $done WHERE id = $id";
-        cmd.Parameters.AddWithValue("$done", done ? 1 : 0);
-        cmd.Parameters.AddWithValue("$id",   id);
+        
+        // Constrói a atualização de forma inteligente: só altera o que o JS enviar
+        var updates = new List<string>();
+        
+        if (root.TryGetProperty("done", out var dv)) {
+            updates.Add("done = $done");
+            cmd.Parameters.AddWithValue("$done", dv.ValueKind == JsonValueKind.True ? 1 : 0);
+        }
+        if (root.TryGetProperty("day", out var dayv)) {
+            updates.Add("day = $day");
+            cmd.Parameters.AddWithValue("$day", dayv.GetString() ?? "");
+        }
+        if (root.TryGetProperty("time", out var timev)) {
+            updates.Add("time = $time");
+            cmd.Parameters.AddWithValue("$time", timev.GetString() ?? "");
+        }
+        if (root.TryGetProperty("subject", out var subv)) {
+            updates.Add("subject = $sub");
+            cmd.Parameters.AddWithValue("$sub", subv.GetString() ?? "");
+        }
+        if (root.TryGetProperty("topic", out var topv)) {
+            updates.Add("topic = $top");
+            cmd.Parameters.AddWithValue("$top", topv.GetString() ?? "");
+        }
+        if (root.TryGetProperty("subtopics", out var subtv)) {
+            updates.Add("subtopics = $subt");
+            cmd.Parameters.AddWithValue("$subt", subtv.GetString() ?? "");
+        }
+
+        if (updates.Count == 0) return Results.NoContent();
+
+        cmd.CommandText = $"UPDATE PLANNER_ITEM SET {string.Join(", ", updates)} WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
+
         return Results.NoContent();
     } catch (Exception ex) {
         return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
@@ -296,7 +348,7 @@ app.MapGet("/api/me/planner", (long userId) => {
         sc.Parameters.AddWithValue("$uid", userId);
         using var sr = sc.ExecuteReader();
         if (!sr.Read())
-            return Results.Ok(new { student = (object?)null, planner = new List<object>() });
+            return Results.Ok(new { student = (object)null, planner = new List<object>() });
         var student = new {
             id     = sr.GetInt64(0),
             name   = sr.GetString(1),
@@ -306,18 +358,21 @@ app.MapGet("/api/me/planner", (long userId) => {
         sr.Close();
 
         var pc = db.CreateCommand();
-        pc.CommandText = "SELECT id, day, subject, topic, hours, done FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
+        // Lendo as colunas time (6) e subtopics (7)
+        pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
         pc.Parameters.AddWithValue("$uid", userId);
         var planner = new List<object>();
         using var pr = pc.ExecuteReader();
         while (pr.Read())
             planner.Add(new {
-                id      = pr.GetInt64(0),
-                day     = pr.GetString(1),
-                subject = pr.GetString(2),
-                topic   = pr.GetString(3),
-                hours   = pr.GetDouble(4),
-                done    = pr.GetInt64(5) == 1
+                id        = pr.GetInt64(0),
+                day       = pr.GetString(1),
+                subject   = pr.GetString(2),
+                topic     = pr.GetString(3),
+                hours     = pr.GetDouble(4),
+                done      = pr.GetInt64(5) == 1,
+                time      = pr.IsDBNull(6) ? "" : pr.GetString(6),
+                subtopics = pr.IsDBNull(7) ? "" : pr.GetString(7)
             });
         return Results.Ok(new { student, planner });
     } catch (Exception ex) {

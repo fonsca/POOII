@@ -10,8 +10,138 @@
   --border:#e5e7eb;
   --danger:#dc2626;
   --shadow: 0 20px 50px -20px rgba(28,58,110,.45);
+  --bio: #22c55e;   /* Verde */
+  --mat: #3b82f6;   /* Azul */
+  --fis: #8b5cf6;   /* Roxo */
+  --qui: #ef4444;   /* Vermelho */
+  --port: #eab308;  /* Amarelo/Dourado */
+  --hist: #d97706;  /* Laranja */
+  --geo: #14b8a6;   /* Verde Água */
+  --rev: #334155;   /* Cinza Escuro */
+  
+  --primary: #4a9fd4;
+  --navy: #1a3264;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --muted-fg: #64748b;
+  --accent-fg: #b45309;
 }
 
+.planner-grid { 
+  overflow-x: auto; /* Cria barra de rolagem horizontal se não couber */
+  margin-top: 1rem; 
+  max-width: 100%; /* A mágica para não invadir a navbar */
+  padding-bottom: 10px;
+
+}
+
+.planner-table { 
+  width: 100%; 
+  min-width: 500px; /* Reduzido de 800px para caber em telas menores */
+  border-collapse: separate; 
+  border-spacing: 3px; /* Espaço menor entre os blocos */
+  table-layout: fixed; 
+}
+
+.day-header { 
+  background: #fff; 
+  padding: 6px; /* Mais fino */
+  text-align: center; 
+  border-radius: 6px; 
+  border: 1px solid #e2e8f0; 
+  font-size: 0.75rem; 
+  color: var(--navy); 
+}
+
+.time-label { 
+  font-size: 0.7rem; /* Letra menor para a hora */
+  color: #718096; 
+  text-align: center; 
+  font-weight: bold; 
+  width: 45px; /* Coluna das horas mais estreita */
+}
+
+.planner-cell { 
+  background: #fdfdfd; 
+  border: 1px dashed #cbd5e0; 
+  border-radius: 4px; 
+  height: 65px; /* Blocos mais baixos */
+  vertical-align: top; 
+  padding: 3px; /* Menos espaço interno */
+  position: relative; 
+}
+
+/* O "esqueleto" do bloco */
+.planner-block {
+  position: absolute; 
+  inset: 2px; /* Deixa uma margenzinha entre o bloco e a célula tracejada */
+  border-radius: 6px; 
+  display: flex;
+  flex-direction: column; 
+  justify-content: center; 
+  align-items: center; /* CENTRALIZA O TEXTO */
+  padding: 0 4px;
+  border-left: 4px solid; /* BORDA LATERAL GROSSA */
+  cursor: pointer; 
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.planner-block:hover { 
+  transform: scale(1.02); 
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
+}
+
+/* Texto da Matéria e Ícone */
+.planner-block-name { 
+  font-size: 0.75rem; 
+  font-weight: 800; 
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* Horário embaixo da Matéria */
+.planner-block-time { 
+  font-size: 0.65rem; 
+  font-weight: 600; 
+  opacity: 0.7; 
+  margin-top: 2px;
+}
+
+/* ---- A MÁGICA DAS CORES (Fundo translúcido + Texto da mesma cor) ---- */
+.planner-block.bio { background: rgba(34,197,94,0.15); border-left-color: var(--bio); color: var(--bio); }
+.planner-block.mat { background: rgba(59,130,246,0.15); border-left-color: var(--mat); color: var(--mat); }
+.planner-block.fis { background: rgba(168,85,247,0.15); border-left-color: var(--fis); color: var(--fis); }
+.planner-block.qui { background: rgba(239,68,68,0.15); border-left-color: var(--qui); color: var(--qui); }
+.planner-block.port { background: rgba(234,179,8,0.15); border-left-color: var(--port); color: var(--port); }
+.planner-block.rev { background: rgba(100,116,139,0.15); border-left-color: var(--rev); color: var(--rev); }
+.planner-block.hist { background: rgba(217,119,6,0.15); border-left-color: var(--hist); color: var(--hist); }
+.planner-block.geo { background: rgba(20,184,166,0.15); border-left-color: var(--geo); color: var(--geo); }
+
+/* Cores das Matérias */
+.block-bio { background: var(--bio); }
+.block-mat { background: var(--mat); }
+.block-fis { background: var(--fis); }
+.block-qui { background: var(--qui); }
+.block-port { background: var(--port); }
+.block-rev { background: var(--rev); }
+.block-hist { background: var(--hist); }
+.block-geo { background: var(--geo); }
+
+.planner-block-name { font-weight: bold; display: block; font-size: 0.65rem; margin-bottom: 2px;}
+.planner-block-time { opacity: 0.9; font-size: 0.6rem; }
+
+/* Botão de excluir do Admin na grade */
+.del-block-btn {
+  position: absolute; top: -6px; right: -6px; background: #e53e3e; color: white;
+  border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 10px;
+  cursor: pointer; display: none; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.planner-cell:hover .del-block-btn { display: flex; }
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Open Sans','Segoe UI',sans-serif}
 body{background:var(--bg);color:var(--text);min-height:100vh}
 h1,h2,h3{font-family:'Montserrat','Segoe UI',sans-serif}
@@ -112,6 +242,7 @@ input,select{font:inherit}
 
 /* A barra lateral (com transição para encolher) */
 .sidebar {
+  
   width: 260px;
   background-color: var(--navy, #1a2530);
   color: #fff;
@@ -122,6 +253,8 @@ input,select{font:inherit}
   transition: width 0.3s ease, padding 0.3s ease;
   overflow: hidden; /* Esconde os textos ao encolher */
   position: relative;
+  flex-shrink: 0; /* Proíbe o planner de esmagar a barra */
+  z-index: 1000;
 }
 
 /* ESTADO ENCOLHIDO da navbar*/
@@ -323,3 +456,35 @@ input,select{font:inherit}
   border-radius: 10px;
   transition: width 0.5s ease-in-out; /* Efeito suave ao crescer */
 }
+
+
+/* ---- POPUP (MODAL) ---- */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: #fff; width: 90%; max-width: 450px; border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 24px; position: relative; animation: slideUp 0.3s ease-out;
+}
+
+.modal-close {
+  position: absolute; top: 16px; right: 16px; background: none; border: none;
+  font-size: 1.2rem; cursor: pointer; color: #94a3b8; transition: color 0.2s;
+}
+.modal-close:hover { color: #ef4444; }
+
+.modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; color: var(--navy); margin-bottom: 4px; letter-spacing: 1px; }
+.modal-subtitle { font-size: 0.8rem; color: #64748b; margin-bottom: 20px; font-weight: bold;}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Efeito da célula vazia (Mentor) */
+.empty-cell:hover { background: rgba(74, 159, 212, 0.05); cursor: pointer; }
+.empty-cell::after { content: '+'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0; color: var(--primary); font-size: 1.5rem; font-weight: bold; transition: 0.2s; }
+.empty-cell:hover::after { opacity: 0.5; }

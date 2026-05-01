@@ -36,6 +36,111 @@ function navigate(hash) { location.hash = hash; }
 window.addEventListener("hashchange", render);
 render();
 
+// Dicionário mapeando a matéria para a classe do CSS e o Nome Oficial
+const SUBJECTS = {
+  bio: { class: "bio", label: "🧬 Biologia" },
+  mat: { class: "mat", label: "📐 Matemática" },
+  fis: { class: "fis", label: "⚡ Física" },
+  qui: { class: "qui", label: "🧪 Química" },
+  port: { class: "port", label: "📝 Português" },
+  hist: { class: "hist", label: "🏛️ História" },
+  geo: { class: "geo", label: "🌍 Geografia" },
+  rev: { class: "rev", label: "🔄 Revisão" }
+};
+
+function buildPlannerGrid(planner, isMentor) {
+  // 📅 LÓGICA DE DATAS DINÂMICAS
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // Retorna de 0 (Domingo) a 6 (Sábado)
+  
+  // Como queremos que a semana comece na Segunda, calculamos a distância até ela
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; 
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMonday);
+
+  const dayNamesFull = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+  const dayNamesShort = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
+  
+  const daysInfo = [];
+  
+  // Monta os 7 dias da semana a partir da Segunda-feira
+  for (let i = 0; i < 7; i++) {
+    const currentDate = new Date(monday);
+    currentDate.setDate(monday.getDate() + i);
+    
+    daysInfo.push({
+      full: dayNamesFull[i],
+      short: dayNamesShort[i],
+      num: String(currentDate.getDate()).padStart(2, '0'), // Garante 2 dígitos (ex: "05")
+      isToday: currentDate.toDateString() === today.toDateString() // Marca true se for hoje!
+    });
+  }
+
+  // 🕒 Horários de estudo (Manhã e Tarde)
+  const timeSlots = ["08:00", "09:00", "10:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+
+let html = `<div class="planner-grid"><table class="planner-table">
+    <thead>
+      <tr>
+        <th style="width:66px"></th>
+        ${daysInfo.map(d => `
+          <!-- O JavaScript coloca a classe 'today' automaticamente no dia atual -->
+          <th class="day-header ${d.isToday ? 'today' : ''}">
+            <span style="display: block; margin-bottom: 2px;">${d.short}</span>
+            <span class="day-num">${d.num}</span>
+          </th>
+        `).join('')}
+      </tr>
+    </thead>
+    <tbody>`;
+
+  timeSlots.forEach(time => {
+    // Bloco de Almoço
+    if (time === "12:00") {
+      html += `<tr>
+        <td colspan="8" style="text-align:center; padding:10px; font-size:10px; color:var(--muted-fg); font-weight:800; letter-spacing:1px; background:rgba(229,231,235,0.2); border-radius:8px;">
+          🍽️ INTERVALO / ALMOÇO (11:00 - 12:00)
+        </td>
+      </tr>`;
+    }
+
+    html += `<tr><td class="time-label">${time}</td>`;
+    
+    daysInfo.forEach(d => {
+      const task = planner.find(p => p.day === d.full && p.time === time);
+      
+      // Se não tem tarefa e é Mentor, adiciona a classe empty-cell e atributos de clique
+      if (!task) {
+        html += `<td class="planner-cell ${isMentor ? 'empty-cell' : ''}" 
+                     ${isMentor ? `data-action="create" data-day="${d.full}" data-time="${time}"` : ''}>
+                 </td>`;
+      } else {
+        // Se tem tarefa
+        const sub = SUBJECTS[task.subject] || { class: "rev" };
+        const nextHour = String(Number(time.split(":")[0]) + 1).padStart(2, '0') + ":00";
+        const doneClass = task.done ? 'opacity: 0.4; filter: grayscale(100%); text-decoration: line-through;' : '';
+
+        // O bloco HTML atualizado para mostrar a Matéria e o Horário (igual ao print)
+        html += `
+          <td class="planner-cell">
+            <div class="planner-block ${sub.class}" style="${doneClass}" 
+                 data-action="${isMentor ? 'edit' : 'view'}" data-id="${task.id}" 
+                 title="Tópico: ${task.topic}">
+              <span class="planner-block-name">${sub.label}</span>
+              <span class="planner-block-time">${time}–${nextHour}</span>
+            </div>
+          </td>
+        `;
+      }
+    });
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+
 function render() {
   // Se não tem nada na URL, o padrão é o login do mentor
   const hash = location.hash || "#/login-admin"; 
@@ -63,7 +168,6 @@ function render() {
 }
 
 // -------- TELA DE LOGIN --------
-// -------- TELA DE LOGIN (Dinâmica) --------
 function renderLogin(type) {
   const title = type === "student" ? "Área do Aluno" : "Painel do Mentor";
   const linkText = type === "student" ? "Sou um mentor →" : "← Sou um aluno";
@@ -236,7 +340,7 @@ async function renderStudentHome(user) {
   }
 }
 
-// -------- ADMIN (lista de alunos) --------
+
 // -------- ADMIN (lista de alunos) --------
 async function renderAdmin(mentor) {
   const pageContent = `
@@ -289,240 +393,89 @@ async function renderAdmin(mentor) {
   refresh();
 }
 
-// -------- STUDENT PLANNER (admin vendo planner do aluno) --------
+// -------- TELA DO MENTOR VENDO O ALUNO --------
 async function renderStudent(mentor, id) {
   try {
     const data = await api(`/students/${id}`);
     const { student } = data;
-    let planner = data.planner;
+    let planner = data.planner || [];
 
     function paint() {
-      // 📊 Cálculos da Barra de Progresso
-      const completedTasks = planner.filter(p => p.done).length;
-      const totalH = planner.reduce((a, b) => a + b.hours, 0);
-      const completedH = planner.filter(p => p.done).reduce((a, b) => a + b.hours, 0);
-      const progressPercent = totalH === 0 ? 0 : Math.round((completedH / totalH) * 100);
-
       const pageContent = `
         <a href="#/admin" style="display:inline-block; margin-bottom:1rem; color:var(--navy); text-decoration:none; font-weight:bold;">← Voltar para alunos</a>
-        
         <section class="section" style="margin-bottom:1.5rem">
-          <div class="row" style="align-items:flex-start">
-            <div style="display:flex;gap:1rem;align-items:center">
-              <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">${initials(student.name)}</div>
-              <div>
-                <h2 style="margin:0">${student.name}</h2>
-                <div class="muted">${student.email} · ${student.course}</div>
-              </div>
-            </div>
-            <div class="stats">
-              <div class="stat"><b>${completedTasks}/${planner.length}</b><span>Tarefas feitas</span></div>
-            </div>
-          </div>
-
-          <!-- BARRA DE PROGRESSO DO ALUNO -->
-          <div class="progress-wrapper">
-            <div class="progress-header">
-              <span>Progresso da Semana</span>
-              <span>${completedH}h de ${totalH}h (${progressPercent}%)</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" style="width: ${progressPercent}%"></div>
+          <div style="display:flex;gap:1rem;align-items:center">
+            <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">${initials(student.name)}</div>
+            <div>
+              <h2 style="margin:0">${student.name}</h2>
+              <div class="muted">${student.email}</div>
             </div>
           </div>
         </section>
 
-        <section class="section" style="margin-bottom:1.5rem">
-          <h2 style="margin-bottom: 1rem;">Adicionar tarefa</h2>
-          <form id="new-task" class="grid-form">
-            <div class="field"><label>Dia</label>
-              <select name="day">${["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"].map(d=>`<option>${d}</option>`).join("")}</select>
-            </div>
-            <div class="field"><label>Matéria</label><input name="subject" required /></div>
-            <div class="field"><label>Tópico</label><input name="topic" required /></div>
-            <div class="field"><label>Horas</label><input name="hours" type="number" step="0.5" min="0.5" value="1" /></div>
-            <button class="btn" style="max-width:160px">Adicionar</button>
-          </form>
-        </section>
-
+        <!-- A GRADE (O formulário antigo sumiu, a mágica é direto aqui) -->
         <section>
-          <h2 style="color:var(--navy);margin-bottom:1rem">Planner semanal</h2>
-          <div id="planner">
-            ${planner.length ? planner.map(p => `
-              <div class="planner-item ${p.done ? "done" : ""}">
-              
-                <div class="checkbox ${p.done ? "checked" : ""}" style="cursor: default;" title="${p.done ? 'Concluída pelo aluno' : 'Aguardando aluno'}">${p.done ? "✓" : ""}</div>
-
-                <div class="meta">
-                  <span>📅 ${p.day}</span>
-                  <b>📘 ${p.subject}</b>
-                  <span style="${p.done?'text-decoration:line-through':''}">${p.topic}</span>
-                  <span>⏱ ${p.hours}h</span>
-                </div>
-                <!-- O mentor continua podendo deletar a tarefa -->
-                <button class="btn-danger" data-del-task="${p.id}">✕</button>
-              </div>
-            `).join("") : `<div class="empty">Nenhuma tarefa no planner ainda.</div>`}
+          <div class="info-bar" style="background:#e6f2ff; padding:10px; border-radius:8px; font-size:0.85rem; margin-bottom:10px;">
+            <span>ℹ️ Clique em um <strong>espaço vazio</strong> para adicionar uma tarefa. Clique em um <strong>bloco</strong> para editá-lo.</span>
           </div>
+          ${buildPlannerGrid(planner, true)}
         </section>
       `;
 
       root.innerHTML = layoutHtml(mentor, pageContent);
       bindHeader();
 
-      // Adicionar nova tarefa
-      document.getElementById("new-task").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const payload = Object.fromEntries(fd);
-        payload.hours = Number(payload.hours);
-        payload.done = false;
-        await api(`/students/${id}/planner`, { method: "POST", body: JSON.stringify(payload) });
-        const fresh = await api(`/students/${id}`);
-        planner = fresh.planner;
-        paint();
-      });
-
-      // Excluir tarefa do planner
-      root.querySelectorAll("[data-del-task]").forEach(b => {
-        b.onclick = async () => {
-          await api(`/planner/${b.dataset.delTask}`, { method: "DELETE" });
-          planner = planner.filter(p => p.id !== Number(b.dataset.delTask)); 
-          paint();
-        };
-      });
+      // OUVINTES DE CLIQUE NO GRID PARA ABRIR O POPUP
+      // OUVINTE DE CLIQUE À PROVA DE FALHAS (Delegação de Evento)
+      const gridContainer = root.querySelector('.planner-grid');
       
-      // O evento de marcar/desmarcar foi removido daqui!
-    }
-    
-    paint();
+      if (gridContainer) {
+        gridContainer.onclick = (e) => {
+          // Busca qual elemento clicado tem o data-action (pode ser o bloco ou a célula vazia)
+          const target = e.target.closest('[data-action]');
+          
+          if (!target) return; // Se clicou em uma linha vazia que não é célula, ignora
 
-  } catch (err) {
-    console.error(err);
-    root.innerHTML = layoutHtml(mentor, `<div class="empty" style="color: red;">Erro ao carregar o planner: ${err.message}</div>`);
-    bindHeader();
-  }
+          const action = target.dataset.action; // Vai ser 'create' ou 'edit'
+          
+          // Se for editar, procura a tarefa correspondente no banco
+          const task = action === 'edit' ? planner.find(p => p.id === Number(target.dataset.id)) : null;
+          
+          console.log("Abrindo popup para:", action, task); // Ajuda a ver se funcionou!
+
+          showPlannerModal({
+            mode: action,
+            day: target.dataset.day,
+            time: target.dataset.time,
+            task: task,
+            // O que acontece ao salvar:
+            onSave: async (formData, mDay, mTime, mId) => {
+              // Adicionamos hours: 1 aqui para garantir que o backend não recuse a requisição
+              const payload = { ...formData, day: mDay, time: mTime, done: false, hours: 1 }; 
+              
+              if (action === 'create') {
+                await api(`/students/${id}/planner`, { method: "POST", body: JSON.stringify(payload) });
+              } else {
+                await api(`/planner/${mId}`, { method: "PUT", body: JSON.stringify({...task, ...payload}) });
+              }
+              const fresh = await api(`/students/${id}`);
+              planner = fresh.planner; 
+              paint();
+            },
+            // O que acontece ao excluir:
+            onDelete: async (delId) => {
+              await api(`/planner/${delId}`, { method: "DELETE" });
+              planner = planner.filter(p => p.id !== delId); 
+              paint();
+            }
+          });
+        };
+      }
+    }
+    paint();
+  } catch (err) { console.error(err); }
 }
 
-// -------- STUDENT PLANNER (admin vendo planner do aluno) --------
-async function renderStudent(mentor, id) {
-  try {
-    const data = await api(`/students/${id}`);
-    const { student } = data;
-    let planner = data.planner;
-
-    function paint() {
-      // 📊 Cálculos da Barra de Progresso
-      const completedTasks = planner.filter(p => p.done).length;
-      const totalH = planner.reduce((a, b) => a + b.hours, 0);
-      const completedH = planner.filter(p => p.done).reduce((a, b) => a + b.hours, 0);
-      const progressPercent = totalH === 0 ? 0 : Math.round((completedH / totalH) * 100);
-
-      const pageContent = `
-        <a href="#/admin" style="display:inline-block; margin-bottom:1rem; color:var(--navy); text-decoration:none; font-weight:bold;">← Voltar para alunos</a>
-        
-        <section class="section" style="margin-bottom:1.5rem">
-          <div class="row" style="align-items:flex-start">
-            <div style="display:flex;gap:1rem;align-items:center">
-              <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">${initials(student.name)}</div>
-              <div>
-                <h2 style="margin:0">${student.name}</h2>
-                <div class="muted">${student.email} · ${student.course}</div>
-              </div>
-            </div>
-            <div class="stats">
-              <div class="stat"><b>${completedTasks}/${planner.length}</b><span>Tarefas feitas</span></div>
-            </div>
-          </div>
-
-          <!-- BARRA DE PROGRESSO DO ALUNO -->
-          <div class="progress-wrapper">
-            <div class="progress-header">
-              <span>Progresso da Semana</span>
-              <span>${completedH}h de ${totalH}h (${progressPercent}%)</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" style="width: ${progressPercent}%"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="section" style="margin-bottom:1.5rem">
-          <h2 style="margin-bottom: 1rem;">Adicionar tarefa</h2>
-          <form id="new-task" class="grid-form">
-            <div class="field"><label>Dia</label>
-              <select name="day">${["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"].map(d=>`<option>${d}</option>`).join("")}</select>
-            </div>
-            <div class="field"><label>Matéria</label><input name="subject" required /></div>
-            <div class="field"><label>Tópico</label><input name="topic" required /></div>
-            <div class="field"><label>Horas</label><input name="hours" type="number" step="0.5" min="0.5" value="1" /></div>
-            <button class="btn" style="max-width:160px">Adicionar</button>
-          </form>
-        </section>
-
-        <section>
-          <h2 style="color:var(--navy);margin-bottom:1rem">Planner semanal</h2>
-          <div id="planner">
-            ${planner.length ? planner.map(p => `
-              <div class="planner-item ${p.done ? "done" : ""}">
-                <button class="checkbox ${p.done ? "checked" : ""}" data-toggle="${p.id}">${p.done ? "✓" : ""}</button>
-                <div class="meta">
-                  <span>📅 ${p.day}</span>
-                  <b>📘 ${p.subject}</b>
-                  <span style="${p.done?'text-decoration:line-through':''}">${p.topic}</span>
-                  <span>⏱ ${p.hours}h</span>
-                </div>
-                <button class="btn-danger" data-del-task="${p.id}">✕</button>
-              </div>
-            `).join("") : `<div class="empty">Nenhuma tarefa no planner ainda.</div>`}
-          </div>
-        </section>
-      `;
-
-      root.innerHTML = layoutHtml(mentor, pageContent);
-      bindHeader();
-
-      // Adicionar nova tarefa
-      document.getElementById("new-task").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const payload = Object.fromEntries(fd);
-        payload.hours = Number(payload.hours);
-        payload.done = false;
-        await api(`/students/${id}/planner`, { method: "POST", body: JSON.stringify(payload) });
-        const fresh = await api(`/students/${id}`);
-        planner = fresh.planner;
-        paint();
-      });
-
-      // Marcar/Desmarcar como concluída
-      root.querySelectorAll("[data-toggle]").forEach(b => {
-        b.onclick = async () => {
-          const item = planner.find(p => p.id === Number(b.dataset.toggle));
-          await api(`/planner/${item.id}`, { method: "PUT", body: JSON.stringify({ ...item, done: !item.done }) });
-          item.done = !item.done; 
-          paint();
-        };
-      });
-
-      // Excluir tarefa do planner
-      root.querySelectorAll("[data-del-task]").forEach(b => {
-        b.onclick = async () => {
-          await api(`/planner/${b.dataset.delTask}`, { method: "DELETE" });
-          planner = planner.filter(p => p.id !== Number(b.dataset.delTask)); 
-          paint();
-        };
-      });
-    }
-    
-    paint();
-
-  } catch (err) {
-    console.error(err);
-    root.innerHTML = layoutHtml(mentor, `<div class="empty" style="color: red;">Erro ao carregar o planner: ${err.message}</div>`);
-    bindHeader();
-  }
-}
 
 // -------- /admin/novo-aluno --------
 function renderNewStudent(mentor) {
@@ -581,30 +534,150 @@ function renderNewStudent(mentor) {
   });
 }
 
+// Função que abre o Popup do Planner
+function showPlannerModal(params) {
+  const { mode, task, day, time, onSave, onDelete, onToggle } = params;
+  
+  // Cria o fundo escuro do modal
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  
+  // Textos e variáveis com base no Modo (create, edit, view)
+  const isMentor = mode === 'create' || mode === 'edit';
+  const modalTitle = mode === 'create' ? 'NOVO BLOCO DE ESTUDO' : (mode === 'edit' ? 'EDITAR BLOCO' : 'DETALHES DO ESTUDO');
+  const dayText = task ? task.day : day;
+  const timeText = task ? task.time : time;
 
-// -------- HOME DO ALUNO (vê o próprio planner) --------
+  // CONTEÚDO PARA O ALUNO (Apenas visualiza e conclui)
+  const studentView = task ? `
+    <div style="background: rgba(229,231,235,0.4); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+      <h4 style="margin: 0; color: var(--navy); font-size: 1.1rem;">${task.topic}</h4>
+      <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #475569; white-space: pre-wrap;">${task.subtopics || 'Sem detalhes adicionais.'}</p>
+    </div>
+    <button class="btn" id="modal-toggle-btn" style="width: 100%; background: ${task.done ? '#94a3b8' : 'var(--bio)'}; border:none;">
+      ${task.done ? 'Desmarcar Conclusão' : '✅ Marcar como Concluído'}
+    </button>
+  ` : '';
+
+  // CONTEÚDO PARA O MENTOR (Formulário de criação/edição)
+  const mentorForm = `
+    <form id="modal-form">
+      <div class="field">
+        <label>Disciplina</label>
+        <select name="subject" required>
+          <option value="bio" ${task?.subject === 'bio' ? 'selected' : ''}>Biologia</option>
+          <option value="mat" ${task?.subject === 'mat' ? 'selected' : ''}>Matemática</option>
+          <option value="fis" ${task?.subject === 'fis' ? 'selected' : ''}>Física</option>
+          <option value="qui" ${task?.subject === 'qui' ? 'selected' : ''}>Química</option>
+          <option value="port" ${task?.subject === 'port' ? 'selected' : ''}>Português</option>
+          <option value="hist" ${task?.subject === 'hist' ? 'selected' : ''}>História</option>
+          <option value="geo" ${task?.subject === 'geo' ? 'selected' : ''}>Geografia</option>
+          <option value="rev" ${task?.subject === 'rev' ? 'selected' : ''}>Revisão</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Tópico Principal</label>
+        <input name="topic" placeholder="Ex: Citologia" value="${task?.topic || ''}" required />
+      </div>
+      <div class="field">
+        <label>Subtópicos / Instruções do Mentor</label>
+        <textarea name="subtopics" rows="3" placeholder="Quais os detalhes desse estudo? (Ex: Fazer exercícios da página 40)" required style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e0; font-family:inherit;">${task?.subtopics || ''}</textarea>
+      </div>
+      
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button type="submit" class="btn" style="flex:1;">Salvar Bloco</button>
+        ${mode === 'edit' ? `<button type="button" class="btn-ghost" id="modal-delete-btn" style="color:#ef4444; border-color:#ef4444;">Excluir</button>` : ''}
+      </div>
+    </form>
+  `;
+
+  // Monta o HTML final do Popup
+  overlay.innerHTML = `
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close-btn">✕</button>
+      <div class="modal-title">${modalTitle}</div>
+      <div class="modal-subtitle">📅 ${dayText} • 🕒 ${timeText}</div>
+      ${isMentor ? mentorForm : studentView}
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Fecha o modal se clicar no "X" ou fora dele
+  const closeModal = () => document.body.removeChild(overlay);
+  overlay.querySelector('#modal-close-btn').onclick = closeModal;
+  overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+
+  // Lógica dos Botões baseada no Modo (Com tratamento de Erros!)
+  if (isMentor) {
+    overlay.querySelector('#modal-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      
+      // Muda o texto do botão para dar feedback visual
+      submitBtn.textContent = "Salvando...";
+      submitBtn.disabled = true;
+
+      try {
+        // Agora nós ESPERAMOS o banco de dados responder antes de fechar
+        await onSave(Object.fromEntries(fd), dayText, timeText, task?.id);
+        closeModal();
+      } catch (err) {
+        alert("Erro ao salvar no banco de dados: " + err.message);
+        submitBtn.textContent = "Salvar Bloco";
+        submitBtn.disabled = false;
+      }
+    };
+
+    if (mode === 'edit') {
+      overlay.querySelector('#modal-delete-btn').onclick = async (e) => {
+        if (confirm("Tem certeza que deseja apagar este bloco?")) { 
+          const btn = e.target;
+          btn.textContent = "Apagando...";
+          try {
+            await onDelete(task.id); 
+            closeModal();
+          } catch (err) {
+            alert("Erro ao excluir: " + err.message);
+            btn.textContent = "Excluir";
+          }
+        }
+      };
+    }
+  } else {
+    // Tela do Aluno (Concluir tarefa)
+    overlay.querySelector('#modal-toggle-btn').onclick = async (e) => { 
+      const btn = e.target;
+      btn.textContent = "Atualizando...";
+      btn.disabled = true;
+      try {
+        await onToggle(task); 
+        closeModal();
+      } catch(err) {
+        alert("Erro ao atualizar status: " + err.message);
+        btn.disabled = false;
+      }
+    };
+  }
+}
+
+
 // -------- HOME DO ALUNO (vê o próprio planner) --------
 async function renderStudentHome(user) {
   try {
-    // 🐛 AQUI ESTAVA O BUG! Agora o aluno busca na mesma rota que o admin usa:
     const data = await api(`/students/${user.id}`); 
     
     function paint() {
-      // Pega os dados exatamente na mesma estrutura do Admin
       const student = data.student || user;
       const planner = data.planner || [];
 
       if (!planner.length && !data.student) {
-        root.innerHTML = layoutHtml(user, `<div class="empty">Seu mentor ainda não vinculou um plano de estudos.</div>`);
+        root.innerHTML = layoutHtml(user, `<div class="empty">Seu monitor ainda não vinculou um plano de estudos.</div>`);
         bindHeader();
         return;
       }
       
-      // 📊 Cálculos da Barra de Progresso
-      const totalH = planner.reduce((acc, p) => acc + p.hours, 0);
-      const completedH = planner.filter(p => p.done).reduce((acc, p) => acc + p.hours, 0);
-      const progressPercent = totalH === 0 ? 0 : Math.round((completedH / totalH) * 100);
-
       const pageContent = `
         <section class="section" style="margin-bottom:1.5rem">
           <div class="row">
@@ -612,76 +685,40 @@ async function renderStudentHome(user) {
               <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">${initials(user.name)}</div>
               <div>
                 <h2 style="margin:0">Olá, ${user.name.split(' ')[0]}!</h2>
-                <div class="muted">${student.email} · ${student.course || "Aluno"}</div>
+                <div class="muted">Aqui está o seu cronograma da semana.</div>
               </div>
-            </div>
-          </div>
-          
-          <!-- BARRA DE PROGRESSO -->
-          <div class="progress-wrapper">
-            <div class="progress-header">
-              <span>Progresso da Semana</span>
-              <span>${completedH}h de ${totalH}h (${progressPercent}%)</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" style="width: ${progressPercent}%"></div>
             </div>
           </div>
         </section>
 
         <section>
-          <h2 style="color:var(--navy);margin-bottom:1rem">Meu planner semanal</h2>
-          <div id="planner">
-            ${planner.length ? planner.map(p => `
-              <div class="planner-item ${p.done ? "done" : ""}">
-                <button class="checkbox ${p.done ? "checked" : ""}" data-toggle="${p.id}">${p.done ? "✓" : ""}</button>
-                <div class="meta">
-                  <span>📅 ${p.day}</span>
-                  <b>📘 ${p.subject}</b>
-                  <span style="${p.done ? 'text-decoration:line-through' : ''}">${p.topic}</span>
-                  <span>⏱ ${p.hours}h</span>
-                </div>
-              </div>
-            `).join("") : `<div class="empty">Nenhuma tarefa no seu planner ainda.</div>`}
+          <div class="info-bar" style="background:#e6f2ff; padding:10px; border-radius:8px; font-size:0.85rem; margin-bottom:10px;">
+            <span>ℹ️ O cronograma é definido pelo seu monitor. <strong>Clique em qualquer bloco</strong> para marcá-lo como concluído.</span>
           </div>
+          ${buildPlannerGrid(planner, false)}
         </section>
       `;
 
       root.innerHTML = layoutHtml(user, pageContent);
       bindHeader();
-
-      // Evento de marcar/desmarcar tarefa (Com animação suave)
-      root.querySelectorAll("[data-toggle]").forEach(b => {
-        b.onclick = async () => {
-          const item = planner.find(p => p.id === Number(b.dataset.toggle));
-          item.done = !item.done; // Inverte o status
+      
+      // Aluno clicando no bloco abre o Popup para ver detalhes
+      // (Mantenha o HTML de renderStudentHome como está, apenas mude o foreach abaixo)
+      
+      // Aluno clicando no bloco abre o Popup para ver detalhes
+      root.querySelectorAll('[data-action="view"]').forEach(b => {
+        b.onclick = () => {
+          const task = planner.find(p => p.id === Number(b.dataset.id));
           
-          // 1. Atualiza visualmente a caixinha e o texto da tarefa
-          const taskItem = b.closest('.planner-item');
-          if (item.done) {
-            taskItem.classList.add('done');
-            b.classList.add('checked');
-            b.textContent = "✓";
-            taskItem.querySelector('.meta').querySelectorAll('span')[1].style.textDecoration = 'line-through';
-          } else {
-            taskItem.classList.remove('done');
-            b.classList.remove('checked');
-            b.textContent = "";
-            taskItem.querySelector('.meta').querySelectorAll('span')[1].style.textDecoration = '';
-          }
-
-          // 2. Calcula a nova porcentagem e movimenta a barra devagar
-          const completedH_new = planner.filter(p => p.done).reduce((acc, p) => acc + p.hours, 0);
-          const totalH_new = planner.reduce((acc, p) => acc + p.hours, 0);
-          const progressPercent_new = totalH_new === 0 ? 0 : Math.round((completedH_new / totalH_new) * 100);
-          
-          document.querySelector('.progress-fill').style.width = progressPercent_new + '%';
-          document.querySelector('.progress-header span:last-child').textContent = `${completedH_new}h de ${totalH_new}h (${progressPercent_new}%)`;
-
-          // 3. Salva no banco de dados em segundo plano
-          await api(`/planner/${item.id}`, {
-            method: "PUT",
-            body: JSON.stringify({ ...item })
+          showPlannerModal({
+            mode: 'view',
+            task: task,
+            // O que acontece quando o aluno clica no botão do popup
+            onToggle: async (t) => {
+              t.done = !t.done; 
+              await api(`/planner/${t.id}`, { method: "PUT", body: JSON.stringify(t) });
+              paint(); // Re-desenha a grade para mostrar/tirar o risco
+            }
           });
         };
       });
@@ -731,10 +768,11 @@ function layoutHtml(u, content) {
       </aside>
 
       <!-- ÁREA DIREITA (Cabeçalho + Conteúdo) -->
-      <div style="flex-grow: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden;">
+      <!-- 👇 A MÁGICA ESTÁ NO min-width: 0 BEM AQUI 👇 -->
+      <div style="flex-grow: 1; display: flex; flex-direction: column; height: 100vh; min-width: 0;">
         
         <!-- CABEÇALHO SUPERIOR DIREITO -->
-        <header style="display: flex; justify-content: flex-end; align-items: center; padding: 1rem 2rem; background-color: #fff; border-bottom: 1px solid rgba(0,0,0,0.05);">
+        <header style="display: flex; justify-content: flex-end; align-items: center; padding: 1rem 2rem; background-color: #fff; border-bottom: 1px solid rgba(0,0,0,0.05); flex-shrink: 0;">
           <div style="display:flex; align-items:center; gap:1rem;">
             <span style="font-size: 0.95rem; font-weight: 500; color: var(--navy);">${u.name}</span>
             <div class="avatar" style="width:36px; height:36px; font-size:0.9rem;">${initials(u.name)}</div>
@@ -743,7 +781,7 @@ function layoutHtml(u, content) {
         </header>
 
         <!-- ÁREA DE CONTEÚDO -->
-        <main class="main-content" style="flex-grow: 1; padding: 2rem; overflow-y: auto; background-color: #f4f7f6;">
+        <main class="main-content" style="flex-grow: 1; padding: 2rem; overflow-y: auto; overflow-x: hidden; background-color: #f4f7f6;">
           ${content}
         </main>
 

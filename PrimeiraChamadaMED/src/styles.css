@@ -165,7 +165,6 @@
   margin-top: 2px;
 }
 
-/* ---- A MÁGICA DAS CORES (Fundo translúcido + Texto da mesma cor) ---- */
 .planner-block.bio { background: rgba(34,197,94,0.15); border-left-color: var(--bio); color: var(--bio); }
 .planner-block.mat { background: rgba(59,130,246,0.15); border-left-color: var(--mat); color: var(--mat); }
 .planner-block.fis { background: rgba(168,85,247,0.15); border-left-color: var(--fis); color: var(--fis); }
@@ -481,7 +480,108 @@ input,select{font:inherit}
 .brand-logo{max-width:220px;width:100%;height:auto;margin-bottom:.5rem;display:block}
 .app-header .logo .logo-img{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:8px;padding:3px}
 
+/* =========================================
+   📰 PORTAL DE NOTÍCIAS (MURAL)
+   ========================================= */
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
 
+.news-card {
+  background: var(--card);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.news-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+
+/* O CARD EM DESTAQUE (Ocupa 2 colunas no desktop) */
+@media (min-width: 800px) {
+  .news-card.featured {
+    grid-column: span 2;
+    flex-direction: row; /* Fica deitado */
+  }
+  .news-card.featured .news-header {
+    width: 40%;
+    min-height: 250px;
+  }
+  .news-card.featured .news-body {
+    width: 60%;
+    justify-content: center;
+  }
+}
+
+.news-header {
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem; /* Tamanho do Emoji/Ícone */
+}
+
+.news-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.news-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted-fg);
+}
+
+.news-meta .inst {
+  color: var(--primary); /* Cor da instituição (Ex: FUVEST) */
+  text-transform: uppercase;
+}
+
+.news-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  color: var(--navy);
+  margin: 0 0 0.5rem 0;
+  line-height: 1.1;
+  letter-spacing: 0.5px;
+}
+
+.news-desc {
+  font-size: 0.9rem;
+  color: #475569;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+  flex-grow: 1;
+}
+
+.news-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.badge.highlight { background: #fffbeb; color: #d97706; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px;}
+.badge.deadline { background: #f0f9ff; color: #0284c7; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem;}
+.badge.deadline.danger { background: #fef2f2; color: #dc2626; } /* Vermelho se estiver acabando */
 
 
 

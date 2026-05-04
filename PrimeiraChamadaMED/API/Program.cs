@@ -25,13 +25,14 @@ string DbPath() {
     if (File.Exists(p2)) return Path.GetFullPath(p2);
     throw new FileNotFoundException("SQLite.db nao encontrado.");
 }
+
 SqliteConnection OpenDb() {
     var conn = new SqliteConnection($"Data Source={DbPath()}");
     conn.Open();
     return conn;
 }
 
-// migracao automatica: cria tabelas se nao existirem e adiciona colunas novas
+// migracao automatica: cria tabelas se nao existirem
 using (var db = OpenDb()) {
     var m = db.CreateCommand();
     m.CommandText = @"
@@ -57,10 +58,19 @@ using (var db = OpenDb()) {
             hours       REAL NOT NULL DEFAULT 1,
             done        INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario)
+        );
+        CREATE TABLE IF NOT EXISTS NOTICIA (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            institution     TEXT NOT NULL,
+            title           TEXT NOT NULL,
+            description     TEXT NOT NULL,
+            publish_date    TEXT NOT NULL,
+            deadline        TEXT NOT NULL,
+            color           TEXT DEFAULT '#3b82f6',
+            icon            TEXT DEFAULT '📰'
         );";
     m.ExecuteNonQuery();
 
-    // Tenta adicionar as colunas novas caso a tabela seja da versão antiga (falha em silêncio se já existir)
     void AddColumn(string table, string column, string type) {
         try {
             var alt = db.CreateCommand();
@@ -136,9 +146,6 @@ app.MapPost("/api/students", async (HttpRequest request) => {
         var initPwd  = Str("initialPassword");
         var mentorId = Lng("mentorId");
 
-        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(course))
-            return Results.Json(new { mensagem = "Nome, e-mail e curso sao obrigatorios." }, statusCode: 400);
-
         using var db = OpenDb();
         var chk = db.CreateCommand();
         chk.CommandText = "SELECT COUNT(*) FROM USUARIO WHERE email = $email";
@@ -200,7 +207,6 @@ app.MapGet("/api/students/{id:long}", (long id) => {
         sr.Close();
 
         var pc = db.CreateCommand();
-        // Lendo as colunas time (6) e subtopics (7)
         pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
         pc.Parameters.AddWithValue("$uid", id);
         var planner = new List<object>();
@@ -252,7 +258,6 @@ app.MapPost("/api/students/{id:long}/planner", async (long id, HttpRequest reque
 
         using var db = OpenDb();
         var ins = db.CreateCommand();
-        // Inserindo os dados com as colunas novas
         ins.CommandText = @"
             INSERT INTO PLANNER_ITEM (id_usuario, day, time, subject, topic, subtopics, hours, done)
             VALUES ($uid, $day, $time, $sub, $top, $subt, $hrs, 0);
@@ -281,9 +286,7 @@ app.MapPut("/api/planner/{id:long}", async (long id, HttpRequest request) => {
         using var db = OpenDb();
         var cmd = db.CreateCommand();
         
-        // Constrói a atualização de forma inteligente: só altera o que o JS enviar
         var updates = new List<string>();
-        
         if (root.TryGetProperty("done", out var dv)) {
             updates.Add("done = $done");
             cmd.Parameters.AddWithValue("$done", dv.ValueKind == JsonValueKind.True ? 1 : 0);
@@ -358,7 +361,6 @@ app.MapGet("/api/me/planner", (long userId) => {
         sr.Close();
 
         var pc = db.CreateCommand();
-        // Lendo as colunas time (6) e subtopics (7)
         pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
         pc.Parameters.AddWithValue("$uid", userId);
         var planner = new List<object>();
@@ -375,6 +377,104 @@ app.MapGet("/api/me/planner", (long userId) => {
                 subtopics = pr.IsDBNull(7) ? "" : pr.GetString(7)
             });
         return Results.Ok(new { student, planner });
+    } catch (Exception ex) {
+        return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
+    }
+});
+
+// -------- ROTAS DO PORTAL DE NOTÍCIAS --------
+
+// GET /api/news
+app.MapGet("/api/news", () => {
+    try {
+        using var db = OpenDb();
+        var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT id, institution, title, description, publish_date, deadline, color, icon FROM NOTICIA ORDER BY id DESC";
+        var news = new List<object>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) {
+            news.Add(new {
+                id = r.GetInt64(0),
+                institution = r.GetString(1),
+                title = r.GetString(2),
+                description = r.GetString(3),
+                publish_date = r.GetString(4),
+                deadline = r.GetString(5),
+                color = r.GetString(6),
+                icon = r.GetString(7)
+            });
+        }
+        return Results.Ok(news);
+    } catch (Exception ex) {
+        return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
+    }
+});
+
+// POST /api/news
+app.MapPost("/api/news", async (HttpRequest request) => {
+    try {
+        using var body = await JsonDocument.ParseAsync(request.Body);
+        var root = body.RootElement;
+        
+        using var db = OpenDb();
+        var cmd = db.CreateCommand();
+        cmd.CommandText = @"
+            INSERT INTO NOTICIA (institution, title, description, publish_date, deadline, color, icon) 
+            VALUES ($inst, $title, $desc, $pub, $dead, $color, $icon)";
+            
+        cmd.Parameters.AddWithValue("$inst", root.GetProperty("institution").GetString());
+        cmd.Parameters.AddWithValue("$title", root.GetProperty("title").GetString());
+        cmd.Parameters.AddWithValue("$desc", root.GetProperty("description").GetString());
+        cmd.Parameters.AddWithValue("$pub", DateTime.Now.ToString("dd MMM yyyy")); 
+        cmd.Parameters.AddWithValue("$dead", root.GetProperty("deadline").GetString());
+        cmd.Parameters.AddWithValue("$color", root.GetProperty("color").GetString());
+        cmd.Parameters.AddWithValue("$icon", root.GetProperty("icon").GetString());
+        
+        cmd.ExecuteNonQuery();
+        return Results.Ok();
+    } catch (Exception ex) {
+        return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
+    }
+});
+
+// DELETE /api/news/{id}
+app.MapDelete("/api/news/{id:long}", (long id) => {
+    try {
+        using var db = OpenDb();
+        var cmd = db.CreateCommand();
+        cmd.CommandText = "DELETE FROM NOTICIA WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+        return Results.NoContent();
+    } catch (Exception ex) {
+        return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
+    }
+});
+
+// PUT /api/news/{id}
+app.MapPut("/api/news/{id:long}", async (long id, HttpRequest request) => {
+    try {
+        using var body = await JsonDocument.ParseAsync(request.Body);
+        var root = body.RootElement;
+        
+        using var db = OpenDb();
+        var cmd = db.CreateCommand();
+        cmd.CommandText = @"
+            UPDATE NOTICIA 
+            SET institution = $inst, title = $title, description = $desc, 
+                deadline = $dead, color = $color, icon = $icon 
+            WHERE id = $id";
+            
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$inst", root.GetProperty("institution").GetString());
+        cmd.Parameters.AddWithValue("$title", root.GetProperty("title").GetString());
+        cmd.Parameters.AddWithValue("$desc", root.GetProperty("description").GetString());
+        cmd.Parameters.AddWithValue("$dead", root.GetProperty("deadline").GetString());
+        cmd.Parameters.AddWithValue("$color", root.GetProperty("color").GetString());
+        cmd.Parameters.AddWithValue("$icon", root.GetProperty("icon").GetString());
+        
+        cmd.ExecuteNonQuery();
+        return Results.NoContent();
     } catch (Exception ex) {
         return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
     }

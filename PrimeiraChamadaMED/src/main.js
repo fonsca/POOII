@@ -129,16 +129,25 @@ function buildPlannerGrid(planner, isMentor) {
 
 // -------- ROTEADOR --------
 function render() {
+  // Se não tem nada na URL, o padrão é o login do mentor
   const hash = location.hash || "#/login-admin"; 
   const user = getUser();
   
+  // Se não está logado e tentou acessar rota restrita, joga pro login
   if (!user && !hash.startsWith("#/login")) return navigate("#/login-admin");
 
+  // ---- TELAS DE LOGIN ----
   if (hash === "#/login-aluno") return renderLogin("student");
   if (hash.startsWith("#/login")) return renderLogin("mentor");
 
+  // ---- ROTAS COMPARTILHADAS (Mentor e Aluno acessam) ----
+  if (hash === "#/noticias") return renderNews(user);
+
+  // ---- ÁREA DO ALUNO ----
+  // Se ele é aluno e não clicou em notícias, joga para o Planner
   if (user.role === "student") return renderStudentHome(user);
 
+  // ---- ÁREA DO MENTOR ----
   if (hash.startsWith("#/admin/novo-aluno")) return renderNewStudent(user);
   if (hash.startsWith("#/admin/aluno/")) {
     const id = Number(hash.split("/").pop());
@@ -146,6 +155,200 @@ function render() {
   }
   
   return renderAdmin(user);
+}
+
+// -------- TELA DE PORTAL DE NOTÍCIAS --------
+// -------- TELA DE PORTAL DE NOTÍCIAS --------
+async function renderNews(user) {
+  try {
+    const isAdmin = user.role !== "student";
+    let newsData = await api("/news");
+    
+    // Variável para controlar se estamos editando alguma notícia
+    let editingNewsId = null; 
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const processedNews = newsData.map(n => {
+      const deadlineDate = new Date(n.deadline + "T00:00:00");
+      const diffTime = deadlineDate - today;
+      const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return { ...n, daysLeft };
+    });
+
+    processedNews.sort((a, b) => {
+      if (a.daysLeft < 0 && b.daysLeft >= 0) return 1;
+      if (b.daysLeft < 0 && a.daysLeft >= 0) return -1;
+      return a.daysLeft - b.daysLeft;
+    });
+
+    function paint() {
+      let pageContent = `
+        <section class="section" style="margin-bottom: 2rem;">
+          <div class="row">
+            <div>
+              <h2 style="margin:0">Mural de Avisos e Oportunidades</h2>
+              <div class="muted">Fique por dentro das datas de vestibulares e comunicados oficiais.</div>
+            </div>
+          </div>
+        </section>
+      `;
+
+      if (isAdmin) {
+        pageContent += `
+          <section class="section" style="margin-bottom: 2rem; background: #f8fafc; border: 1px dashed #cbd5e0;" id="form-section">
+            <h3 id="form-title" style="margin-bottom: 1rem; color: var(--navy); font-size: 1.1rem;">Publicar nova Notícia</h3>
+            <form id="news-form" class="grid-form">
+              <div class="field"><label>Instituição</label><input name="institution" placeholder="Ex: FUVEST" required /></div>
+              <div class="field"><label>Data Limite (Inscrição)</label><input name="deadline" type="date" required /></div>
+              <div class="field"><label>Cor de Fundo</label><input name="color" type="color" value="#3b82f6" style="height: 40px; padding: 2px;" required /></div>
+              <div class="field"><label>Ícone (Emoji)</label><input name="icon" value="📝" required /></div>
+              <div class="field" style="grid-column: 1 / -1;"><label>Título Principal</label><input name="title" placeholder="Ex: FUVEST 2026 ABRE INSCRIÇÕES EM ABRIL" required /></div>
+              <div class="field" style="grid-column: 1 / -1;"><label>Texto Explicativo</label><textarea name="description" rows="3" required></textarea></div>
+              <div style="grid-column: 1 / -1; display: flex; gap: 10px;">
+                <button type="submit" id="submit-btn" class="btn" style="max-width: 200px;">Publicar Notícia</button>
+                <button type="button" id="cancel-edit-btn" class="btn-ghost" style="display: none; color: #64748b;">Cancelar Edição</button>
+              </div>
+            </form>
+          </section>
+        `;
+      }
+
+      pageContent += `<div class="news-grid">`;
+      if (processedNews.length === 0) pageContent += `<div class="empty" style="grid-column: 1/-1;">Nenhuma notícia publicada no momento.</div>`;
+
+      processedNews.forEach((n, index) => {
+        const isFeatured = index === 0 && n.daysLeft >= 0;
+        const isExpired = n.daysLeft < 0;
+        
+        let deadlineText = `Inscrições: ${n.deadline.split("-").reverse().join("/")}`;
+        let badgeClass = "";
+        
+        if (isExpired) {
+          deadlineText = "Prazo Encerrado";
+          badgeClass = "danger";
+        } else if (n.daysLeft <= 15) {
+          deadlineText = `Faltam ${n.daysLeft} dias!`;
+          badgeClass = "danger";
+        }
+
+        pageContent += `
+          <div class="news-card ${isFeatured ? 'featured' : ''}" ${isExpired ? 'style="opacity: 0.6; filter: grayscale(1);"' : ''}>
+            <div class="news-header" style="background-color: ${n.color};">
+              <span class="news-icon">${n.icon}</span>
+            </div>
+            <div class="news-body">
+              <div class="news-meta">
+                <span class="inst">${n.institution}</span>
+                <span class="date">${n.publish_date}</span>
+                ${isFeatured ? '<span class="badge highlight">🔥 Destaque</span>' : ''}
+              </div>
+              <h3 class="news-title">${n.title}</h3>
+              <p class="news-desc">${n.description}</p>
+              
+              <div class="news-footer">
+                <span class="badge deadline ${badgeClass}">${deadlineText}</span>
+                ${isAdmin ? `
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn edit-news-btn" data-id="${n.id}" style="padding: 4px 10px; font-size: 0.75rem; background: var(--primary);">✏️ Editar</button>
+                    <button class="btn-danger delete-news-btn" data-id="${n.id}" style="padding: 4px 10px; font-size: 0.75rem;">🗑️ Excluir</button>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      pageContent += `</div>`;
+      
+      root.innerHTML = layoutHtml(user, pageContent);
+      bindHeader();
+
+      if (isAdmin) {
+        const form = document.getElementById("news-form");
+        const formTitle = document.getElementById("form-title");
+        const submitBtn = document.getElementById("submit-btn");
+        const cancelBtn = document.getElementById("cancel-edit-btn");
+
+        // Lógica de SALVAR (Criar ou Atualizar)
+        form.onsubmit = async (e) => {
+          e.preventDefault();
+          const fd = new FormData(e.target);
+          const payload = Object.fromEntries(fd);
+          
+          if (editingNewsId) {
+            await api(`/news/${editingNewsId}`, { method: "PUT", body: JSON.stringify(payload) });
+          } else {
+            await api("/news", { method: "POST", body: JSON.stringify(payload) });
+          }
+          renderNews(user); // Recarrega a tela
+        };
+
+        // Lógica de EDITAR (Preenche o formulário)
+        document.querySelectorAll(".edit-news-btn").forEach(btn => {
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            const id = Number(btn.dataset.id);
+            const newsItem = processedNews.find(n => n.id === id);
+            
+            if(newsItem) {
+              form.elements["institution"].value = newsItem.institution;
+              form.elements["deadline"].value = newsItem.deadline;
+              form.elements["color"].value = newsItem.color;
+              form.elements["icon"].value = newsItem.icon;
+              form.elements["title"].value = newsItem.title;
+              form.elements["description"].value = newsItem.description;
+              
+              editingNewsId = id;
+              
+              // Muda o visual do formulário para o "Modo Edição"
+              formTitle.textContent = `Editando: ${newsItem.institution}`;
+              formTitle.style.color = "#d97706";
+              submitBtn.textContent = "Salvar Alterações";
+              submitBtn.style.backgroundColor = "#d97706";
+              cancelBtn.style.display = "inline-block";
+              
+              // 👇 A MÁGICA DA ROLAGEM AQUI 👇
+              // Pega a área direita da tela e rola até o topo (top: 0) de forma suave
+              const mainScrollArea = document.querySelector('.main-content');
+              if (mainScrollArea) {
+                mainScrollArea.scrollTo({ top: 0, behavior: "smooth" });
+              }
+            }
+          };
+        });
+
+        // Lógica de CANCELAR a edição
+        cancelBtn.onclick = () => {
+          editingNewsId = null;
+          form.reset();
+          formTitle.textContent = "Publicar nova Notícia";
+          formTitle.style.color = "var(--navy)";
+          submitBtn.textContent = "Publicar Notícia";
+          submitBtn.style.backgroundColor = "var(--primary)";
+          cancelBtn.style.display = "none";
+        };
+
+        // Lógica de EXCLUIR
+        document.querySelectorAll(".delete-news-btn").forEach(btn => {
+          btn.onclick = async (e) => {
+            e.stopPropagation();
+            if (confirm("Tem certeza que deseja apagar esta notícia?")) {
+              await api(`/news/${btn.dataset.id}`, { method: "DELETE" });
+              renderNews(user);
+            }
+          };
+        });
+      }
+    }
+
+    paint();
+  } catch (err) {
+    root.innerHTML = layoutHtml(user, `<div class="empty">Erro ao carregar avisos: ${err.message}</div>`);
+    bindHeader();
+  }
 }
 
 
@@ -156,8 +359,10 @@ function layoutHtml(u, content) {
   const isCollapsed = localStorage.getItem("sidebar_collapsed") === "true";
   const collapsedClass = isCollapsed ? "collapsed" : "";
   const menuItems = isStudent 
-    ? `<a href="#/aluno" title="Meu Planner"><span style="font-size: 1.25rem">📅</span> <span class="hide-on-collapse">Meu Planner</span></a>`
-    : `<a href="#/admin" title="Meus Alunos"><span style="font-size: 1.25rem">👥</span> <span class="hide-on-collapse">Meus Alunos</span></a>`;
+    ? `<a href="#/aluno" title="Meu Planner"><span style="font-size: 1.25rem">📅</span> <span class="hide-on-collapse">Meu Planner</span></a>
+       <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Mural de Avisos</span></a>`
+    : `<a href="#/admin" title="Meus Alunos"><span style="font-size: 1.25rem">👥</span> <span class="hide-on-collapse">Meus Alunos</span></a>
+       <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Postar Avisos</span></a>`;
 
   return `
     <div class="app-layout">

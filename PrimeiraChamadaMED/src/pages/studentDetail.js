@@ -21,6 +21,7 @@ async function renderStudent(mentor, id) {
           <div class="info-bar" style="background:#e6f2ff; padding:10px; border-radius:8px; font-size:0.85rem; margin-bottom:10px;">
             <span>ℹ️ Clique em um <strong>espaço vazio</strong> para adicionar uma tarefa. Clique em um <strong>bloco</strong> para editá-lo.</span>
           </div>
+          ${buildProgressBar(planner)}
           ${buildPlannerGrid(planner, true)}
         </section>
       `;

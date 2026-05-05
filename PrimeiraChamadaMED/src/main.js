@@ -109,7 +109,7 @@ function buildPlannerGrid(planner, isMentor) {
         const doneClass = task.done ? 'opacity: 0.4; filter: grayscale(100%); text-decoration: line-through;' : '';
         html += `
           <td class="planner-cell">
-            <div class="planner-block ${sub.class}" style="${doneClass}" 
+            <div class="planner-block ${sub.class} ${task.done ? 'is-done' : ''}" 
                  data-action="${isMentor ? 'edit' : 'view'}" data-id="${task.id}" 
                  title="Tópico: ${task.topic}">
               <span class="planner-block-name">${sub.label}</span>
@@ -124,6 +124,45 @@ function buildPlannerGrid(planner, isMentor) {
 
   html += `</tbody></table></div>`;
   return html;
+}
+
+
+// -------- BARRA DE PROGRESSO --------
+function buildProgressBar(planner) {
+  // Filtra os "fantasmas" (ignora testes antigos que não têm horário válido definido)
+  const validBlocks = planner.filter(p => p.time && p.time.trim() !== "");
+
+  // Se não houver blocos válidos na semana, a barra nem aparece
+  if (!validBlocks || validBlocks.length === 0) return ''; 
+
+  const total = validBlocks.length;
+  const completed = validBlocks.filter(p => p.done).length;
+  
+  // Regra de três simples para a porcentagem
+  const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+  return `
+    <div style="margin-bottom: 1.5rem; background: #ffffff; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="font-weight: 800; color: var(--navy); font-size: 1.2rem;">📊 Progresso da Semana</div>
+        <div style="font-weight: 700; color: #475569; font-size: 0.95rem; background: #f1f5f9; padding: 4px 12px; border-radius: 20px;">
+          ${completed} de ${total} blocos concluídos
+        </div>
+      </div>
+      
+      <!-- O Container da Barra (Fundo Azul) -->
+      <div style="background-color: #3b82f6; height: 28px; width: 100%; border-radius: 14px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); position: relative;">
+        
+        <!-- O Preenchimento da Barra (Amarelo Vibrante com animação) -->
+        <div style="background-color: #fbbf24; height: 100%; width: ${percentage}%; border-radius: 14px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 2px 0 5px rgba(0,0,0,0.1);"></div>
+        
+        <!-- A Porcentagem centralizada -->
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.9rem; color: #ffffff; text-shadow: 1px 1px 3px rgba(0,0,0,0.6); pointer-events: none;">
+          ${percentage}%
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 
@@ -432,3 +471,97 @@ window.togglePwd = function(inputId, btn) {
     img.src = "img/olho-fechado.png"; 
   }
 };
+
+
+// -------- TELA INICIAL DO MENTOR (DASHBOARD GERAL) --------
+async function renderAdmin(user) {
+  try {
+    // 1. Busca a lista de alunos atrelados a este mentor
+    const students = await api(`/students?mentorId=${user.id}`);
+    
+    // 2. Busca o planner de cada aluno para calcular o progresso
+    const studentsWithProgress = await Promise.all(students.map(async (student) => {
+      const data = await api(`/students/${student.id}`);
+      const planner = data.planner || [];
+      
+      // Mesma lógica de ignorar os blocos fantasmas
+      const validBlocks = planner.filter(p => p.time && p.time.trim() !== "");
+      const total = validBlocks.length;
+      const completed = validBlocks.filter(p => p.done).length;
+      const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+      
+      // Devolve o aluno com as estatísticas embutidas
+      return { ...student, total, completed, percentage };
+    }));
+
+    // 3. Monta o visual do Dashboard
+    let html = `
+      <section style="margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h2 style="margin: 0; color: var(--navy); font-size: 1.5rem;">Visão Geral dos Alunos</h2>
+            <div style="color: #64748b; margin-top: 5px;">Acompanhe o engajamento da sua turma nesta semana.</div>
+          </div>
+          <button class="btn" onclick="navigate('#/admin/novo-aluno')">➕ Novo Aluno</button>
+        </div>
+      </section>
+    `;
+
+    if (studentsWithProgress.length === 0) {
+      html += `<div class="empty" style="text-align: center; padding: 3rem;">Você ainda não tem alunos cadastrados. Clique no botão acima para começar!</div>`;
+    } else {
+      // Cria um Grid responsivo para os cards dos alunos
+      html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">`;
+      
+      studentsWithProgress.forEach(s => {
+        // Semáforo de cores para a barra (Verde, Amarelo ou Vermelho)
+        let barColor = "#fbbf24"; // Amarelo padrão
+        if (s.total === 0) barColor = "#cbd5e0"; // Cinza se não tiver blocos
+        else if (s.percentage === 100) barColor = "#10b981"; // Verde (Tudo concluído!)
+        else if (s.percentage <= 30) barColor = "#ef4444"; // Vermelho (Alerta de atraso!)
+
+        html += `
+          <div style="background: white; border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.2s;" 
+               onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 10px 15px -3px rgba(0,0,0,0.1)'; this.style.borderColor='#cbd5e0';" 
+               onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 6px -1px rgba(0,0,0,0.05)'; this.style.borderColor='var(--border)';"
+               onclick="navigate('#/admin/aluno/${s.id}')"
+               title="Clique para abrir o Planner de ${s.name}">
+            
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="avatar" style="width: 48px; height: 48px; font-size: 1.2rem; background-color: var(--gold);">${initials(s.name)}</div>
+                <div>
+                  <h3 style="margin: 0; font-size: 1.1rem; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${s.name}</h3>
+                  <span style="font-size: 0.75rem; color: #475569; background: #f1f5f9; padding: 3px 8px; border-radius: 12px; font-weight: 600;">${s.course}</span>
+                </div>
+              </div>
+              <div style="font-size: 1.5rem; opacity: 0.3;">📋</div>
+            </div>
+
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 8px; color: #475569; font-weight: 700;">
+                <span>Progresso Semanal</span>
+                <span style="color: ${barColor};">${s.completed} / ${s.total}</span>
+              </div>
+              
+              <!-- Mini Barra de Progresso -->
+              <div style="background-color: #e2e8f0; height: 12px; width: 100%; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                <div style="background-color: ${barColor}; height: 100%; width: ${s.percentage}%; border-radius: 6px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+              </div>
+            </div>
+
+          </div>
+        `;
+      });
+      
+      html += `</div>`;
+    }
+
+    root.innerHTML = layoutHtml(user, html);
+    bindHeader();
+
+  } catch (err) {
+    root.innerHTML = layoutHtml(user, `<div class="empty">Erro ao carregar o dashboard: ${err.message}</div>`);
+    bindHeader();
+  }
+}

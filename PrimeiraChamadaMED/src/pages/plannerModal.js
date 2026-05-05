@@ -12,15 +12,18 @@ function showPlannerModal(params) {
   const dayText = task ? task.day : day;
   const timeText = task ? task.time : time;
 
-  // CONTEÚDO PARA O ALUNO (Apenas visualiza e conclui)
+  // 👇 CONTEÚDO PARA O ALUNO (Com o Botão Verde)
   const studentView = task ? `
     <div style="background: rgba(229,231,235,0.4); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
       <h4 style="margin: 0; color: var(--navy); font-size: 1.1rem;">${task.topic}</h4>
       <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #475569; white-space: pre-wrap;">${task.subtopics || 'Sem detalhes adicionais.'}</p>
     </div>
-    <button class="btn" id="modal-toggle-btn" style="width: 100%; background: ${task.done ? '#94a3b8' : 'var(--bio)'}; border:none;">
-      ${task.done ? 'Desmarcar Conclusão' : '✅ Marcar como Concluído'}
-    </button>
+    
+    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
+      <button id="modal-toggle-btn" class="btn" style="width: 100%; padding: 12px; font-size: 1rem; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; color: white; background-color: ${task.done ? '#64748b' : '#10b981'}; transition: background-color 0.2s;">
+        ${task.done ? '↩️ Desmarcar Conclusão' : '✅ Marcar como Concluído'}
+      </button>
+    </div>
   ` : '';
 
   // CONTEÚDO PARA O MENTOR (Formulário de criação/edição)
@@ -72,19 +75,17 @@ function showPlannerModal(params) {
   overlay.querySelector('#modal-close-btn').onclick = closeModal;
   overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-  // Lógica dos Botões baseada no Modo (Com tratamento de Erros!)
+  // Lógica dos Botões baseada no Modo
   if (isMentor) {
     overlay.querySelector('#modal-form').onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const submitBtn = e.target.querySelector('button[type="submit"]');
       
-      // Muda o texto do botão para dar feedback visual
       submitBtn.textContent = "Salvando...";
       submitBtn.disabled = true;
 
       try {
-        // Agora nós ESPERAMOS o banco de dados responder antes de fechar
         await onSave(Object.fromEntries(fd), dayText, timeText, task?.id);
         closeModal();
       } catch (err) {
@@ -110,18 +111,21 @@ function showPlannerModal(params) {
       };
     }
   } else {
-    // Tela do Aluno (Concluir tarefa)
-    overlay.querySelector('#modal-toggle-btn').onclick = async (e) => { 
-      const btn = e.target;
-      btn.textContent = "Atualizando...";
-      btn.disabled = true;
-      try {
-        await onToggle(task); 
-        closeModal();
-      } catch(err) {
-        alert("Erro ao atualizar status: " + err.message);
-        btn.disabled = false;
-      }
-    };
+    // 👇 A LÓGICA DO BOTÃO DO ALUNO
+    const toggleBtn = overlay.querySelector('#modal-toggle-btn');
+    if (toggleBtn) {
+      toggleBtn.onclick = async () => { 
+        toggleBtn.disabled = true; 
+        toggleBtn.textContent = "Atualizando...";
+        try {
+          await onToggle(task); // Salva no Banco e Recarrega a Tela
+          closeModal(); 
+        } catch(err) {
+          alert("Erro ao atualizar status: " + err.message);
+          toggleBtn.disabled = false;
+          toggleBtn.textContent = task.done ? '↩️ Desmarcar Conclusão' : '✅ Marcar como Concluído';
+        }
+      };
+    }
   }
 }

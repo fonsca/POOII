@@ -643,3 +643,58 @@ input,select{font:inherit}
 .empty-cell:hover { background: rgba(74, 159, 212, 0.05); cursor: pointer; }
 .empty-cell::after { content: '+'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0; color: var(--primary); font-size: 1.5rem; font-weight: bold; transition: 0.2s; }
 .empty-cell:hover::after { opacity: 0.5; }
+
+/* ---- ESTILO DE TAREFA CONCLUÍDA ---- */
+.planner-block.is-done {
+  opacity: 0.5; /* Deixa o bloco meio transparente */
+  filter: grayscale(0.5); /* Tira um pouco da cor */
+}
+
+/* Adiciona um ícone de check no canto do bloco */
+.planner-block.is-done::after {
+  content: '✅';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 14px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* ---- CONFIGURAÇÕES DE EXPORTAÇÃO PARA PDF ---- */
+@media print {
+  /* Esconde o menu lateral, o cabeçalho e os botões que não devem ir pro PDF */
+  .sidebar, header, .btn, .btn-ghost, #toggle-sidebar, .modal-overlay {
+    display: none !important;
+  }
+  
+  /* Ajusta o layout para ocupar 100% do papel e tira fundos cinzas */
+  .app-layout {
+    display: block !important;
+  }
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  /* Garante que o navegador vai imprimir as cores de fundo (Biologia verde, Física roxa, etc) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Define o formato da página como A4 Paisagem (Deitada) para o planner caber direitinho */
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  /* Dá um respiro e remove as sombras na tabela */
+  .planner-grid {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e0;
+  }
+}

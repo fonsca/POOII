@@ -197,7 +197,6 @@ function render() {
 }
 
 // -------- TELA DE PORTAL DE NOTÍCIAS --------
-// -------- TELA DE PORTAL DE NOTÍCIAS --------
 async function renderNews(user) {
   try {
     const isAdmin = user.role !== "student";

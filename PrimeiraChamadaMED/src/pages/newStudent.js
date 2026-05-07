@@ -11,7 +11,7 @@ function renderNewStudent(mentor) {
         <div class="field"><label>Nome *</label><input name="name" required placeholder="Ex.: João Silva" /></div>
         <div class="field"><label>E-mail *</label><input name="email" type="email" required placeholder="Ex.: joao@gmail.com" /></div>
         <div class="field"><label>Curso / Objetivo *</label><input name="course" required placeholder="Ex.: Medicina USP" /></div>
-        <div class="field"><label>Telefone</label><input name="phone" placeholder="(00) 00000-0000" /></div>
+        <div class="field"><label>Telefone</label><input type="text" id="phone" placeholder="(00) 00000-0000" oninput="applyPhoneMask(this)" required /></div>
         <div class="field"><label>Data de nascimento</label><input name="birthDate" type="date" /></div>
         
         <div class="field">

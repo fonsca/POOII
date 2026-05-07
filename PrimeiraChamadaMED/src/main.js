@@ -168,32 +168,130 @@ function buildProgressBar(planner) {
 
 // -------- ROTEADOR --------
 function render() {
-  // Se não tem nada na URL, o padrão é o login do mentor
   const hash = location.hash || "#/login-admin"; 
   const user = getUser();
   
-  // Se não está logado e tentou acessar rota restrita, joga pro login
   if (!user && !hash.startsWith("#/login")) return navigate("#/login-admin");
 
-  // ---- TELAS DE LOGIN ----
   if (hash === "#/login-aluno") return renderLogin("student");
   if (hash.startsWith("#/login")) return renderLogin("mentor");
 
-  // ---- ROTAS COMPARTILHADAS (Mentor e Aluno acessam) ----
   if (hash === "#/noticias") return renderNews(user);
-
-  // ---- ÁREA DO ALUNO ----
-  // Se ele é aluno e não clicou em notícias, joga para o Planner
-  if (user.role === "student") return renderStudentHome(user);
-
-  // ---- ÁREA DO MENTOR ----
-  if (hash.startsWith("#/admin/novo-aluno")) return renderNewStudent(user);
-  if (hash.startsWith("#/admin/aluno/")) {
-    const id = Number(hash.split("/").pop());
-    return renderStudent(user, id);
-  }
+  if (hash === "#/perfil") return renderProfile(user, user.id);
   
-  return renderAdmin(user);
+  if (hash.startsWith("#/admin/aluno/perfil/")) {
+    const id = Number(hash.split("/").pop());
+    return renderProfile(user, id);
+  }
+
+  // ---- 4. ROTAS EXCLUSIVAS DO MENTOR ----
+  if (user && user.role === "mentor") {
+    if (hash.startsWith("#/admin/novo-aluno")) return renderNewStudent(user);
+    
+    // 👉 1º LUGAR: Rota ESPECÍFICA de Editar!
+    if (hash.startsWith("#/admin/aluno/editar/")) {
+      const id = Number(hash.split("/").pop());
+      return renderEditStudent(user, id);
+    }
+
+    // 👉 2º LUGAR: Rota GENÉRICA do Planner do Aluno!
+    if (hash.startsWith("#/admin/aluno/")) {
+      const id = Number(hash.split("/").pop());
+      return renderStudent(user, id);
+    }
+
+    return renderAdmin(user); // Tela inicial do Mentor
+  }
+
+  // ---- 5. ROTA DO ALUNO ----
+  if (user && user.role === "student") {
+    return renderStudentHome(user);
+  }
+}
+
+// -------- TELA DE EDITAR CADASTRO DO ALUNO --------
+async function renderEditStudent(mentor, studentId) {
+  try {
+    // 1. Busca os dados atuais do aluno para preencher o formulário
+    const data = await api(`/students/${studentId}`);
+    const student = data.student || data;
+
+    const pageContent = `
+      <section style="max-width: 600px; margin: 0 auto; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid var(--border);">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 8px 14px; width: fit-content; gap: 6px;">
+          <h2 style="margin: 0; color: var(--navy);">✏️ Editar Aluno</h2>
+          <button class="btn-ghost" onclick="navigate('#/admin/aluno/${studentId}')">Cancelar</button>
+        </div>
+
+        <form id="edit-student-form" style="display: flex; flex-direction: column; gap: 1.5rem;">
+          
+          <div>
+            <label style="display: block; font-weight: bold; margin-bottom: 0.5rem; color: var(--navy);">Nome Completo</label>
+            <input type="text" id="edit-name" value="${student.name}" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 1rem;" />
+          </div>
+
+          <div>
+            <label style="display: block; font-weight: bold; margin-bottom: 0.5rem; color: var(--navy);">E-mail</label>
+            <input type="email" id="edit-email" value="${student.email}" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 1rem;" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <label style="display: block; font-weight: bold; margin-bottom: 0.5rem; color: var(--navy);">Curso Alvo</label>
+              <input type="text" id="edit-course" value="${student.course}" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 1rem;" />
+            </div>
+            
+            <div>
+              <label style="display: block; font-weight: bold; margin-bottom: 0.5rem; color: var(--navy);">Telefone (WhatsApp)</label>
+              <input type="text" id="edit-phone" value="${student.phone || ''}" placeholder="(XX) XXXXX-XXXX" oninput="applyPhoneMask(this)" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 1rem;" />
+            </div>
+          </div>
+
+          <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn" style="background: #10b981; font-size: 1rem; padding: 10px 24px;">💾 Salvar Alterações</button>
+          </div>
+
+        </form>
+      </section>
+    `;
+
+    root.innerHTML = layoutHtml(mentor, pageContent);
+    bindHeader();
+
+    // 2. Lógica para salvar as alterações
+    document.getElementById('edit-student-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+
+      const payload = {
+        name: document.getElementById('edit-name').value,
+        email: document.getElementById('edit-email').value,
+        course: document.getElementById('edit-course').value,
+        phone: document.getElementById('edit-phone').value
+      };
+
+      try {
+        await api(`/students/${studentId}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+        
+        // Se deu certo, volta pra tela do aluno!
+        navigate(`#/admin/aluno/${studentId}`);
+      } catch (err) {
+        alert("Erro ao editar aluno: " + err.message);
+        btn.disabled = false;
+        btn.textContent = "💾 Salvar Alterações";
+      }
+    };
+
+  } catch (err) {
+    root.innerHTML = layoutHtml(mentor, `<div class="empty">Erro: ${err.message}</div>`);
+    bindHeader();
+  }
 }
 
 // -------- TELA DE PORTAL DE NOTÍCIAS --------
@@ -398,36 +496,39 @@ function layoutHtml(u, content) {
   const collapsedClass = isCollapsed ? "collapsed" : "";
   const menuItems = isStudent 
     ? `<a href="#/aluno" title="Meu Planner"><span style="font-size: 1.25rem">📅</span> <span class="hide-on-collapse">Meu Planner</span></a>
-       <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Mural de Avisos</span></a>`
+       <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Mural de Avisos</span></a><a href="#/perfil">👤 Meu Perfil</a>`
     : `<a href="#/admin" title="Meus Alunos"><span style="font-size: 1.25rem">👥</span> <span class="hide-on-collapse">Meus Alunos</span></a>
        <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Postar Avisos</span></a>`;
 
+  const avatarHtml = u.foto 
+    ? `<img src="${u.foto}" class="avatar" style="width:36px; height:36px; object-fit: cover; border-radius: 50%;" />`
+    : `<div class="avatar" style="width:36px; height:36px;">${initials(u.name)}</div>`;     
+
   return `
     <div class="app-layout">
-      <aside class="sidebar ${collapsedClass}" id="main-sidebar">
+      <aside class="sidebar" id="main-sidebar">
         <div class="sidebar-top">
-          <div class="sidebar-brand" title="Primeira Chamada MED">
-            <img src="img/lg.png" alt="Logo" style="width: 40px; height: 40px; object-fit: contain;" />
-            <div class="hide-on-collapse">
-              <div style="font-weight: bold; font-size: 1rem;">Primeira Chamada <span style="color:var(--gold)">MED</span></div>
-              <div style="font-size: 0.75rem; opacity: 0.7;">${subtitle}</div>
+          <div class="sidebar-brand">
+            <img src="img/lg.png" style="width: 40px;" />
+            <div>
+              <div style="font-weight: bold;">Primeira Chamada <span style="color:var(--gold)">MED</span></div>
+              <div style="font-size: 0.75rem;">${subtitle}</div>
             </div>
           </div>
-          <button class="toggle-btn" id="toggle-sidebar" title="Recolher/Expandir menu">☰</button>
         </div>
-        <nav class="sidebar-nav">
-          ${menuItems}
-        </nav>
+        <nav class="sidebar-nav">${menuItems}</nav>
       </aside>
-      <div style="flex-grow: 1; display: flex; flex-direction: column; height: 100vh; min-width: 0;">
-        <header style="display: flex; justify-content: flex-end; align-items: center; padding: 1rem 2rem; background-color: #fff; border-bottom: 1px solid rgba(0,0,0,0.05); flex-shrink: 0;">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; height: 100vh;">
+        <header style="display: flex; justify-content: flex-end; align-items: center; padding: 1rem; background-color: #fff; border-bottom: 1px solid rgba(0,0,0,0.05);">
           <div style="display:flex; align-items:center; gap:1rem;">
-            <span style="font-size: 0.95rem; font-weight: 500; color: var(--navy);">${u.name}</span>
-            <div class="avatar" style="width:36px; height:36px; font-size:0.9rem;">${initials(u.name)}</div>
-            <button class="btn-ghost" id="logout" style="margin-left: 1rem; color: #dc3545; border: 1px solid rgba(220, 53, 69, 0.3); padding: 0.4rem 1rem;">Sair</button>
+            <span style="font-weight: 500;">${u.name}</span>
+            
+            ${avatarHtml}
+            
+            <button class="btn-ghost" id="logout" style="color: #dc3545;">Sair</button>
           </div>
         </header>
-        <main class="main-content" style="flex-grow: 1; padding: 2rem; overflow-y: auto; overflow-x: hidden; background-color: #f4f7f6;">
+        <main class="main-content" style="flex-grow: 1; padding: 2rem; overflow-y: auto; background-color: #f4f7f6;">
           ${content}
         </main>
       </div>
@@ -455,8 +556,9 @@ function bindHeader() {
   }
 }
 
-function initials(name) {
-  return name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
+function initials(name) { 
+  if (!name) return "??";
+  return name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase(); 
 }
 
 window.togglePwd = function(inputId, btn) {
@@ -470,6 +572,32 @@ window.togglePwd = function(inputId, btn) {
     img.src = "img/olho-fechado.png"; 
   }
 };
+
+// Função para formatar o telefone automaticamente (XX) XXXXX-XXXX
+function applyPhoneMask(input) {
+  // Remove tudo que NÃO for número
+  let v = input.value.replace(/\D/g, ''); 
+  
+  // Limita a 11 números no máximo (DDD + 9 dígitos)
+  if (v.length > 11) v = v.substring(0, 11); 
+
+  if (v.length > 10) {
+    // Formato Celular: (XX) XXXXX-XXXX
+    v = v.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3');
+  } else if (v.length > 6) {
+    // Formato Fixo/Digitando: (XX) XXXX-XXXX
+    v = v.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3');
+  } else if (v.length > 2) {
+    // Apenas DDD e primeiros números: (XX) XXXX
+    v = v.replace(/^(\d{2})(\d{0,5})/, '($1) $2');
+  } else if (v.length > 0) {
+    // Apenas DDD: (XX
+    v = v.replace(/^(\d*)/, '($1');
+  }
+
+  // Atualiza o valor na tela
+  input.value = v;
+}
 
 
 // -------- TELA INICIAL DO MENTOR (DASHBOARD GERAL) --------
@@ -496,14 +624,15 @@ async function renderAdmin(user) {
     // 3. Monta o visual do Dashboard
     let html = `
       <section style="margin-bottom: 2rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <h2 style="margin: 0; color: var(--navy); font-size: 1.5rem;">Visão Geral dos Alunos</h2>
-            <div style="color: #64748b; margin-top: 5px;">Acompanhe o engajamento da sua turma nesta semana.</div>
+          <h2 style="margin: 0; color: var(--navy);">Visão Geral dos Alunos</h2>
+          <div style="color: #64748b; margin-top: 4px; margin-bottom: 1rem;">
+            Acompanhe o engajamento da sua turma nesta semana.
           </div>
-          <button class="btn" onclick="navigate('#/admin/novo-aluno')">➕ Novo Aluno</button>
-        </div>
-      </section>
+          
+          <button class="btn btn-sm" onclick="navigate('#/admin/novo-aluno')" style="background-color: var(--navy); display: flex; align-items: center; gap: 6px; width: fit-content; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <span>➕ Novo Aluno</span> 
+          </button>
+        </section>
     `;
 
     if (studentsWithProgress.length === 0) {
@@ -561,6 +690,147 @@ async function renderAdmin(user) {
 
   } catch (err) {
     root.innerHTML = layoutHtml(user, `<div class="empty">Erro ao carregar o dashboard: ${err.message}</div>`);
+    bindHeader();
+  }
+}
+
+// -------- TELA DE PERFIL (SOMENTE UPLOAD DE FOTO) --------
+async function renderProfile(currentUser, targetUserId) {
+  try {
+    const isOwner = currentUser.id === targetUserId;
+    const data = await api(`/students/${targetUserId}`);
+    const { student } = data;
+    const planner = data.planner || [];
+
+    // --- CÁLCULO DE HORAS DE ESTUDO NA SEMANA (Mantido!) ---
+    const hoursPerDay = { "Segunda": 0, "Terça": 0, "Quarta": 0, "Quinta": 0, "Sexta": 0, "Sábado": 0, "Domingo": 0 };
+    let totalCompletedBlocks = 0;
+    planner.forEach(task => {
+      if (task.done) {
+        totalCompletedBlocks++;
+        if (hoursPerDay[task.day] !== undefined) hoursPerDay[task.day] += task.hours;
+      }
+    });
+    const dayNamesShort = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+    const dayNamesFull = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+    const maxHoursInADay = Math.max(...Object.values(hoursPerDay), 1);
+    
+    let chartHtml = '';
+    const diaSemanaSistema = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+    const hojeNome = diaSemanaSistema[new Date().getDay()];
+    dayNamesFull.forEach((day, index) => {
+      const hours = hoursPerDay[day];
+      const heightPercent = hours === 0 ? 0 : Math.max(20, (hours / maxHoursInADay) * 100); 
+      const barHeightStyle = hours === 0 ? 'height: 12px; border-radius: 20px;' : `height: ${heightPercent}%;`;
+      
+      const eHoje = day === hojeNome;
+
+      chartHtml += `
+        <div class="hour-bar-wrapper" style="${eHoje ? 'transform: scale(1.1); transition: 0.3s;' : ''}">
+          <div class="hour-bar-bg" style="height: 100px; ${eHoje ? 'border: 2px solid #3b82f6; background: #eff6ff;' : ''}">
+            <div class="hour-bar-fill" style="${barHeightStyle} ${hours < 0.5 && eHoje ? 'background: #fbbf24;' : ''}"></div>
+          </div>
+          <div style="font-size: 0.8rem; font-weight: bold; color: ${eHoje ? '#3b82f6' : 'var(--navy)'}; margin-top: 4px;">
+            ${dayNamesShort[index]} ${eHoje ? '⭐' : ''}
+          </div>
+          <div style="font-size: 0.75rem; color: #64748b; font-weight: bold;">${hours}h</div>
+        </div>
+      `;
+    });
+
+    // --- LAYOUT DA TELA ---
+    const avatarHtml = student.foto 
+      ? `<img src="${student.foto}" id="profile-picture-img" class="profile-avatar-large" style="object-fit:cover;" />` 
+      : `<div id="profile-picture-div" class="profile-avatar-large">${initials(student.name)}</div>`;
+
+    const pageContent = `
+      ${!isOwner ? `<a href="#/admin/aluno/${targetUserId}" style="display:inline-block; margin-bottom:1rem; color:var(--navy); font-weight:bold; text-decoration:none;">← Voltar ao Planner</a>` : ''}
+      
+      <div class="profile-header-card">
+        ${avatarHtml}
+        <div style="flex-grow: 1;">
+          <h1 style="margin: 0; font-size: 2rem; text-transform: uppercase;">${student.name}</h1>
+          <div style="color: rgba(255,255,255,0.8); font-size: 0.9rem; margin-bottom: 10px;">${student.email}</div>
+          <div class="profile-tags">
+            <span class="tag-yellow">${student.course}</span>
+          </div>
+        </div>
+        
+        ${isOwner ? `
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <label for="profile-photo-input" class="btn" style="background: #3b82f6; cursor: pointer; text-align:center; padding: 10px 20px;">
+              📸 Alterar Foto
+            </label>
+            <input type="file" id="profile-photo-input" accept="image/png, image/jpeg, image/webp" style="display: none;" />
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">🔥</div>
+          <div class="stat-value">${student.streak || 0} DIAS</div>
+          <div class="stat-label">Streak Atual</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📖</div>
+          <div class="stat-value">${totalCompletedBlocks}</div>
+          <div class="stat-label">Blocos Concluídos da Semana</div>
+        </div>
+      </div>
+      <div class="hours-card">
+        <h3 style="margin: 0; color: var(--navy); font-size: 1.2rem; text-transform: uppercase;">Horas de Estudo (Semana)</h3>
+        <div class="hours-chart">${chartHtml}</div>
+      </div>
+    `;
+
+    root.innerHTML = layoutHtml(currentUser, pageContent);
+    bindHeader();
+
+    // --- LÓGICA DE UPLOAD DE FOTO (Mantida!) ---
+    const photoInput = document.getElementById('profile-photo-input');
+    if (photoInput) {
+      photoInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { alert("Imagem muito grande (máx 2MB)."); return; }
+
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = async () => {
+          const base64String = reader.result;
+          
+          // Feedback visual rápido
+          const imgEl = document.getElementById('profile-picture-img');
+          const divEl = document.getElementById('profile-picture-div');
+          if (imgEl) imgEl.src = base64String;
+          else if (divEl) divEl.outerHTML = `<img src="${base64String}" id="profile-picture-img" class="profile-avatar-large" style="object-fit:cover;" />`;
+
+          try {
+            // 👉 Enviamos a foto NOVA, mas mantemos o nome ATUAL (student.name)
+            await api(`/students/${targetUserId}/profile`, {
+              method: 'PUT',
+              body: JSON.stringify({ name: student.name, foto: base64String }) 
+            });
+            
+            // Atualiza a foto na memória local para o cabeçalho global mudar
+            if (isOwner) {
+                currentUser.foto = base64String;
+                setUser(currentUser, !!localStorage.getItem("user"));
+            }
+            renderProfile(currentUser, targetUserId); // Recarrega para garantir
+          } catch (err) {
+            alert("Erro ao salvar foto: " + err.message);
+            renderProfile(currentUser, targetUserId); // Restaura em caso de erro
+          }
+        };
+      };
+    }
+    
+    // 👉 ALTERAÇÃO AQUI: Removemos toda a lógica do 'btn-edit-profile' que ficava aqui no final.
+
+  } catch (err) {
+    root.innerHTML = layoutHtml(currentUser, `<div class="empty">Erro: ${err.message}</div>`);
     bindHeader();
   }
 }

@@ -1,4 +1,4 @@
-// -------- TELA DO MENTOR VENDO O ALUNO --------
+// -------- TELA DO MENTOR DENTRO DO ALUNO, VENDO O PLANNER ETC --------
 async function renderStudent(mentor, id) {
   try {
     const data = await api(`/students/${id}`);
@@ -12,9 +12,15 @@ async function renderStudent(mentor, id) {
           <div style="display:flex;gap:1rem;align-items:center">
             <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">${initials(student.name)}</div>
             <div>
-              <h2 style="margin:0">${student.name}</h2>
+              <h2 style="margin-bottom: 3px;">${student.name}</h2>
               <div class="muted">${student.email}</div>
+              <div class="muted">${student.phone}</div>
             </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm" onclick="navigate('#/admin/aluno/editar/${student.id}')" style="background-color: #3b82f6; display: flex; align-items: center; gap: 4px; width: fit-content; margin-top: 8px;">
+                <span>✏️</span> Editar
+              </button>
           </div>
         </section>
         <section>

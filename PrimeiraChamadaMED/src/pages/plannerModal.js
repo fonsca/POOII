@@ -12,7 +12,6 @@ function showPlannerModal(params) {
   const dayText = task ? task.day : day;
   const timeText = task ? task.time : time;
 
-  // 👇 CONTEÚDO PARA O ALUNO (Com o Botão Verde)
   const studentView = task ? `
     <div style="background: rgba(229,231,235,0.4); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
       <h4 style="margin: 0; color: var(--navy); font-size: 1.1rem;">${task.topic}</h4>

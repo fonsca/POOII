@@ -2,28 +2,40 @@
 async function renderStudentHome(user) {
   try {
     // Busca os dados direto do servidor (sem aquela lógica de offline)
+// Dentro da sua função renderStudentHome(user)...
     const data = await api(`/students/${user.id}`);
+    const student = data.student || data; // Pega os dados frescos do aluno
     const planner = data.planner || [];
+
+    // 👉 Atualiza a memória se o aluno trocou a foto em outro lugar
+    if (student.foto && student.foto !== user.foto) {
+       user.foto = student.foto;
+       setUser(user, !!localStorage.getItem("user"));
+    }
+
+    // 👉 LÓGICA DA FOTO NO PLANNER
+    const avatarHtml = user.foto 
+      ? `<img src="${user.foto}" class="avatar" style="width:54px; height:54px; object-fit: cover; border-radius: 50%;" />`
+      : `<div class="avatar" style="width:54px; height:54px; font-size:1.1rem">${initials(user.name)}</div>`;
 
     const pageContent = `
         <section class="section" style="margin-bottom:1.5rem">
           <div class="row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
             
             <div style="display:flex;gap:1rem;align-items:center">
-              <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">${initials(user.name)}</div>
+              ${avatarHtml}
               <div>
                 <h2 style="margin:0">Olá, ${user.name.split(' ')[0]}!</h2>
                 <div class="muted">Aqui está o seu cronograma da semana.</div>
               </div>
             </div>
             
-            <!-- Botão de Exportar PDF (Agora bem menor e compacto) -->
-            <button class="btn" onclick="window.print()" style="background-color: var(--navy); padding: 8px 14px; font-size: 0.85rem; width: fit-content; height: fit-content; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <button class="btn" onclick="window.print()" style="background-color: var(--navy); padding: 8px 14px; font-size: 0.85rem; width: fit-content; display: flex; align-items: center; gap: 6px;">
               <span style="font-size: 1.1rem;">🖨️</span> PDF
             </button>
-            
           </div>
         </section>
+        ...
         
         ${buildProgressBar(planner)}
         ${buildPlannerGrid(planner, false)}

@@ -76,27 +76,81 @@ using (var db = OpenDb()) {
             var alt = db.CreateCommand();
             alt.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {type};";
             alt.ExecuteNonQuery();
-        } catch { /* Ignora erro se a coluna já existir */ }
+        } catch { }
+        
+        try {
+        var alt = db.CreateCommand();
+        alt.CommandText = "ALTER TABLE USUARIO ADD COLUMN foto TEXT DEFAULT '';";
+        alt.ExecuteNonQuery();
+        } catch { }
+        try {
+            var alt = db.CreateCommand();
+            alt.CommandText = "ALTER TABLE USUARIO ADD COLUMN data_ultima_ofensiva TEXT DEFAULT '';";
+            alt.ExecuteNonQuery();
+        } catch { }
     }
     
     AddColumn("PLANNER_ITEM", "time", "TEXT");
     AddColumn("PLANNER_ITEM", "subtopics", "TEXT");
 }
 
+// PUT /api/students/{id} (Editar Cadastro Geral do Aluno)
+app.MapPut("/api/students/{id:long}", async (long id, HttpRequest request) => {
+    try {
+        using var body = await JsonDocument.ParseAsync(request.Body);
+        var root = body.RootElement;
+        string Str(string k) => root.TryGetProperty(k, out var v) ? v.GetString() ?? "" : "";
+
+        var name = Str("name");
+        var email = Str("email");
+        var course = Str("course");
+        var phone = Str("phone");
+
+        using var db = OpenDb();
+        
+        // 1. Atualiza o NOME e EMAIL na tabela principal
+        var cmdUser = db.CreateCommand();
+        cmdUser.CommandText = "UPDATE USUARIO SET nome = $nome, email = $email WHERE id_usuario = $id";
+        cmdUser.Parameters.AddWithValue("$nome", name);
+        cmdUser.Parameters.AddWithValue("$email", email);
+        cmdUser.Parameters.AddWithValue("$id", id);
+        cmdUser.ExecuteNonQuery();
+
+        // 2. Atualiza o CURSO e TELEFONE no perfil do estudante
+        var cmdProfile = db.CreateCommand();
+        cmdProfile.CommandText = "UPDATE STUDENT_PROFILE SET course = $course, phone = $phone WHERE id_usuario = $id";
+        cmdProfile.Parameters.AddWithValue("$course", course);
+        cmdProfile.Parameters.AddWithValue("$phone", string.IsNullOrWhiteSpace(phone) ? DBNull.Value : (object)phone);
+        cmdProfile.Parameters.AddWithValue("$id", id);
+        cmdProfile.ExecuteNonQuery();
+
+        return Results.Ok(new { mensagem = "Cadastro atualizado com sucesso!" });
+    } catch (Exception ex) {
+        return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
+    }
+});
+
+
 // POST /api/auth/login
 app.MapPost("/api/auth/login", (LoginRequest req) => {
     try {
         using var db = OpenDb();
         var cmd = db.CreateCommand();
-        cmd.CommandText = "SELECT id_usuario, nome, tipo_usuario FROM USUARIO WHERE email = $email AND senha = $senha";
+        // 👉 1. ADICIONEI A COLUNA 'foto' AQUI NO SELECT
+        cmd.CommandText = "SELECT id_usuario, nome, tipo_usuario, foto FROM USUARIO WHERE email = $email AND senha = $senha";
         cmd.Parameters.AddWithValue("$email",  req.email    ?? "");
         cmd.Parameters.AddWithValue("$senha",  req.password ?? "");
         using var r = cmd.ExecuteReader();
         if (!r.Read())
             return Results.Json(new { mensagem = "E-mail ou senha incorretos." }, statusCode: 401);
+            
         var tipo = r.GetString(2);
         var role = tipo.Equals("Estudante", StringComparison.OrdinalIgnoreCase) ? "student" : "mentor";
-        return Results.Ok(new { id = r.GetInt64(0), name = r.GetString(1), role });
+        // 👉 2. PEGO A FOTO DO BANCO DE DADOS
+        var foto = r.IsDBNull(3) ? "" : r.GetString(3); 
+        
+        // 👉 3. RETORNO A FOTO PARA O JAVASCRIPT
+        return Results.Ok(new { id = r.GetInt64(0), name = r.GetString(1), role, foto }); 
     } catch (Exception ex) {
         return Results.Json(new { mensagem = "Erro: " + ex.Message }, statusCode: 500);
     }
@@ -183,26 +237,30 @@ app.MapPost("/api/students", async (HttpRequest request) => {
     }
 });
 
-// GET /api/students/{id}
+// GET /api/students/{id:long}
 app.MapGet("/api/students/{id:long}", (long id) => {
     try {
         using var db = OpenDb();
         var sc = db.CreateCommand();
+        // ADICIONADO: u.foto, u.streak_estudos
         sc.CommandText = @"
-            SELECT u.id_usuario, u.nome, u.email, sp.course, sp.phone
+            SELECT u.id_usuario, u.nome, u.email, sp.course, sp.phone, u.foto, u.streak_estudos
             FROM USUARIO u
             JOIN STUDENT_PROFILE sp ON sp.id_usuario = u.id_usuario
             WHERE u.id_usuario = $id";
         sc.Parameters.AddWithValue("$id", id);
         using var sr = sc.ExecuteReader();
         if (!sr.Read())
-            return Results.Json(new { mensagem = "Aluno nao encontrado." }, statusCode: 404);
+            return Results.Json(new { mensagem = "Aluno não encontrado." }, statusCode: 404);
+            
         var student = new {
-            id     = sr.GetInt64(0),
-            name   = sr.GetString(1),
-            email  = sr.GetString(2),
-            course = sr.GetString(3),
-            phone  = sr.IsDBNull(4) ? "" : sr.GetString(4)
+            id      = sr.GetInt64(0),
+            name    = sr.GetString(1),
+            email   = sr.GetString(2),
+            course  = sr.GetString(3),
+            phone   = sr.IsDBNull(4) ? "" : sr.GetString(4),
+            foto    = sr.IsDBNull(5) ? "" : sr.GetString(5),
+            streak  = sr.GetInt64(6)
         };
         sr.Close();
 
@@ -282,41 +340,63 @@ app.MapPut("/api/planner/{id:long}", async (long id, HttpRequest request) => {
     try {
         using var body = await JsonDocument.ParseAsync(request.Body);
         var root = body.RootElement;
-        
         using var db = OpenDb();
+
+        // 1. Atualiza o status da tarefa (o que você já fazia)
         var cmd = db.CreateCommand();
-        
-        var updates = new List<string>();
         if (root.TryGetProperty("done", out var dv)) {
-            updates.Add("done = $done");
+            cmd.CommandText = "UPDATE PLANNER_ITEM SET done = $done WHERE id = $id";
             cmd.Parameters.AddWithValue("$done", dv.ValueKind == JsonValueKind.True ? 1 : 0);
-        }
-        if (root.TryGetProperty("day", out var dayv)) {
-            updates.Add("day = $day");
-            cmd.Parameters.AddWithValue("$day", dayv.GetString() ?? "");
-        }
-        if (root.TryGetProperty("time", out var timev)) {
-            updates.Add("time = $time");
-            cmd.Parameters.AddWithValue("$time", timev.GetString() ?? "");
-        }
-        if (root.TryGetProperty("subject", out var subv)) {
-            updates.Add("subject = $sub");
-            cmd.Parameters.AddWithValue("$sub", subv.GetString() ?? "");
-        }
-        if (root.TryGetProperty("topic", out var topv)) {
-            updates.Add("topic = $top");
-            cmd.Parameters.AddWithValue("$top", topv.GetString() ?? "");
-        }
-        if (root.TryGetProperty("subtopics", out var subtv)) {
-            updates.Add("subtopics = $subt");
-            cmd.Parameters.AddWithValue("$subt", subtv.GetString() ?? "");
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
         }
 
-        if (updates.Count == 0) return Results.NoContent();
+        // 2. BUSCA O DONO DA TAREFA E O TOTAL DE HORAS DELE HOJE
+        // (Aqui usamos o dia da semana atual: Seg, Ter, Qua...)
+        string[] dias = { "Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado" };
+        string hojePt = dias[(int)DateTime.Now.DayOfWeek];
+        string hojeData = DateTime.Now.ToString("yyyy-MM-dd");
 
-        cmd.CommandText = $"UPDATE PLANNER_ITEM SET {string.Join(", ", updates)} WHERE id = $id";
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.ExecuteNonQuery();
+        // Busca o ID do usuário desta tarefa
+        var cmdUser = db.CreateCommand();
+        cmdUser.CommandText = "SELECT id_usuario FROM PLANNER_ITEM WHERE id = $id";
+        cmdUser.Parameters.AddWithValue("$id", id);
+        long userId = (long)cmdUser.ExecuteScalar()!;
+
+        // Soma as horas concluídas HOJE
+        var cmdHoras = db.CreateCommand();
+        cmdHoras.CommandText = "SELECT SUM(hours) FROM PLANNER_ITEM WHERE id_usuario = $uid AND day = $day AND done = 1";
+        cmdHoras.Parameters.AddWithValue("$uid", userId);
+        cmdHoras.Parameters.AddWithValue("$day", hojePt);
+        var totalHoje = cmdHoras.ExecuteScalar();
+        double horasConcluidas = (totalHoje == DBNull.Value) ? 0 : Convert.ToDouble(totalHoje);
+
+        // 3. LÓGICA DA OFENSIVA (STREAK)
+        if (horasConcluidas >= 0.5) { // 30 minutos
+            var cmdCheck = db.CreateCommand();
+            cmdCheck.CommandText = "SELECT streak_estudos, data_ultima_ofensiva FROM USUARIO WHERE id_usuario = $uid";
+            cmdCheck.Parameters.AddWithValue("$uid", userId);
+            using var r = cmdCheck.ExecuteReader();
+            if (r.Read()) {
+                int streak = r.GetInt32(0);
+                string ultimaData = r.IsDBNull(1) ? "" : r.GetString(1);
+                
+                if (ultimaData != hojeData) { // Se ainda não ganhou ofensiva hoje
+                    string ontemData = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd");
+                    
+                    if (ultimaData == ontemData) streak++; // Estudou ontem? Aumenta!
+                    else streak = 1; // Quebrou a sequência? Volta pra 1.
+
+                    r.Close();
+                    var cmdUp = db.CreateCommand();
+                    cmdUp.CommandText = "UPDATE USUARIO SET streak_estudos = $s, data_ultima_ofensiva = $d WHERE id_usuario = $uid";
+                    cmdUp.Parameters.AddWithValue("$s", streak);
+                    cmdUp.Parameters.AddWithValue("$d", hojeData);
+                    cmdUp.Parameters.AddWithValue("$uid", userId);
+                    cmdUp.ExecuteNonQuery();
+                }
+            }
+        }
 
         return Results.NoContent();
     } catch (Exception ex) {
@@ -475,6 +555,29 @@ app.MapPut("/api/news/{id:long}", async (long id, HttpRequest request) => {
         
         cmd.ExecuteNonQuery();
         return Results.NoContent();
+    } catch (Exception ex) {
+        return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
+    }
+});
+
+// PUT /api/students/{id}/profile (Editar Perfil e Foto)
+app.MapPut("/api/students/{id:long}/profile", async (long id, HttpRequest request) => {
+    try {
+        using var body = await JsonDocument.ParseAsync(request.Body);
+        var root = body.RootElement;
+        
+        string nome = root.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+        string foto = root.TryGetProperty("foto", out var f) ? f.GetString() ?? "" : "";
+
+        using var db = OpenDb();
+        var cmd = db.CreateCommand();
+        cmd.CommandText = "UPDATE USUARIO SET nome = $nome, foto = $foto WHERE id_usuario = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$nome", nome);
+        cmd.Parameters.AddWithValue("$foto", foto);
+        cmd.ExecuteNonQuery();
+
+        return Results.Ok(new { mensagem = "Perfil atualizado!" });
     } catch (Exception ex) {
         return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
     }

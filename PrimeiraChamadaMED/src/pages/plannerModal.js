@@ -52,7 +52,7 @@ function showPlannerModal(params) {
       
       <div style="display:flex; gap:10px; margin-top:20px;">
         <button type="submit" class="btn" style="flex:1;">Salvar Bloco</button>
-        ${mode === 'edit' ? `<button type="button" class="btn-ghost" id="modal-delete-btn" style="color:#ef4444; border-color:#ef4444;">Excluir</button>` : ''}
+        ${mode === 'edit' ? `<button type="button" class="btn-cancel" id="modal-delete-btn">Excluir</button>` : ''}
       </div>
     </form>
   `;

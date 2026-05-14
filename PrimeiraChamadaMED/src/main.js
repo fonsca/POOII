@@ -17,6 +17,7 @@ async function api(path, opts = {}) {
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
+  
   if (!res.ok) {
     const text = await res.text();
     try {
@@ -27,8 +28,11 @@ async function api(path, opts = {}) {
       throw e;
     }
   }
+  
   if (res.status === 204) return undefined;
-  return res.json();
+  
+  const textBody = await res.text();
+  return textBody ? JSON.parse(textBody) : {};
 }
 
 function navigate(hash) { location.hash = hash; }
@@ -221,7 +225,6 @@ async function renderEditStudent(mentor, studentId) {
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 8px 14px; width: fit-content; gap: 6px;">
           <h2 style="margin: 0; color: var(--navy);">✏️ Editar Aluno</h2>
-          <button class="btn-ghost" onclick="navigate('#/admin/aluno/${studentId}')">Cancelar</button>
         </div>
 
         <form id="edit-student-form" style="display: flex; flex-direction: column; gap: 1.5rem;">
@@ -249,7 +252,8 @@ async function renderEditStudent(mentor, studentId) {
           </div>
 
           <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
-            <button type="submit" class="btn" style="background: #10b981; font-size: 1rem; padding: 10px 24px;">💾 Salvar Alterações</button>
+            <button type="submit" class="btn" style="background: #10b981; font-size: 1rem; padding: 10px 24px;">Salvar Alterações</button>
+            <button class="btn-cancel" onclick="navigate('#/admin/aluno/${studentId}')">Cancelar</button>
           </div>
 
         </form>
@@ -324,7 +328,7 @@ async function renderNews(user) {
         <section class="section" style="margin-bottom: 2rem;">
           <div class="row">
             <div>
-              <h2 style="margin:0">Mural de Avisos e Oportunidades</h2>
+              <h2 style="margin:0">Mural de Avisos</h2>
               <div class="muted">Fique por dentro das datas de vestibulares e comunicados oficiais.</div>
             </div>
           </div>
@@ -334,7 +338,7 @@ async function renderNews(user) {
       if (isAdmin) {
         pageContent += `
           <section class="section" style="margin-bottom: 2rem; background: #f8fafc; border: 1px dashed #cbd5e0;" id="form-section">
-            <h3 id="form-title" style="margin-bottom: 1rem; color: var(--navy); font-size: 1.1rem;">Publicar nova Notícia</h3>
+            <h3 id="form-title" style="margin-bottom: 1rem; color: var(--navy); font-size: 1.1rem;">Publicar Nova Aviso</h3>
             <form id="news-form" class="grid-form">
               <div class="field"><label>Instituição</label><input name="institution" placeholder="Ex: FUVEST" required /></div>
               <div class="field"><label>Data Limite (Inscrição)</label><input name="deadline" type="date" required /></div>
@@ -343,7 +347,7 @@ async function renderNews(user) {
               <div class="field" style="grid-column: 1 / -1;"><label>Título Principal</label><input name="title" placeholder="Ex: FUVEST 2026 ABRE INSCRIÇÕES EM ABRIL" required /></div>
               <div class="field" style="grid-column: 1 / -1;"><label>Texto Explicativo</label><textarea name="description" rows="3" required></textarea></div>
               <div style="grid-column: 1 / -1; display: flex; gap: 10px;">
-                <button type="submit" id="submit-btn" class="btn" style="max-width: 200px;">Publicar Notícia</button>
+                <button type="submit" id="submit-btn" class="btn" style="max-width: 200px;">Publicar Aviso</button>
                 <button type="button" id="cancel-edit-btn" class="btn-ghost" style="display: none; color: #64748b;">Cancelar Edição</button>
               </div>
             </form>
@@ -377,7 +381,6 @@ async function renderNews(user) {
             <div class="news-body">
               <div class="news-meta">
                 <span class="inst">${n.institution}</span>
-                <span class="date">${n.publish_date}</span>
                 ${isFeatured ? '<span class="badge highlight">🔥 Destaque</span>' : ''}
               </div>
               <h3 class="news-title">${n.title}</h3>
@@ -410,17 +413,51 @@ async function renderNews(user) {
 
         // Lógica de SALVAR (Criar ou Atualizar)
         form.onsubmit = async (e) => {
-          e.preventDefault();
-          const fd = new FormData(e.target);
-          const payload = Object.fromEntries(fd);
-          
+        e.preventDefault();
+
+        const btn = e.target.querySelector('button[type="submit"]');
+        const textoOriginal = btn.innerHTML;
+        const corOriginal = btn.style.backgroundColor;
+
+        // 2. Muda para o estado de carregamento
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Salvando...";
+        btn.style.opacity = "0.8";
+
+        const fd = new FormData(e.target);
+        const payload = Object.fromEntries(fd);
+        
+        try {
+          // 3. Envia para a API (Criar ou Editar)
           if (editingNewsId) {
             await api(`/news/${editingNewsId}`, { method: "PUT", body: JSON.stringify(payload) });
           } else {
             await api("/news", { method: "POST", body: JSON.stringify(payload) });
           }
-          renderNews(user); // Recarrega a tela
-        };
+          
+          // Verde, aviso salvo, e depois de 3 seg recarrega a lista para mostrar a novidade
+          btn.style.backgroundColor = "#10b981";
+          btn.style.opacity = "1";
+          btn.innerHTML = "✅ Aviso salvo!";
+          
+          setTimeout(() => {
+            renderNews(user); 
+          }, 2000);
+
+        } catch (err) {
+          // Se a API der erro, fica vermelho, avisa e volta ao normal depois de 3 seg
+          btn.disabled = false;
+          btn.innerHTML = "❌ Erro ao salvar";
+          btn.style.backgroundColor = "#ef4444"; 
+          
+          setTimeout(() => {
+            btn.innerHTML = textoOriginal;
+            btn.style.backgroundColor = corOriginal;
+          }, 3000);
+          
+          alert("Não foi possível salvar o aviso: " + err.message);
+        }
+      };
 
         // Lógica de EDITAR (Preenche o formulário)
         document.querySelectorAll(".edit-news-btn").forEach(btn => {
@@ -498,7 +535,7 @@ function layoutHtml(u, content) {
     ? `<a href="#/aluno" title="Meu Planner"><span style="font-size: 1.25rem">📅</span> <span class="hide-on-collapse">Meu Planner</span></a>
        <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Mural de Avisos</span></a><a href="#/perfil">👤 Meu Perfil</a>`
     : `<a href="#/admin" title="Meus Alunos"><span style="font-size: 1.25rem">👥</span> <span class="hide-on-collapse">Meus Alunos</span></a>
-       <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Postar Avisos</span></a>`;
+       <a href="#/noticias" title="Mural de Avisos"><span style="font-size: 1.25rem">📰</span> <span class="hide-on-collapse">Mural de Avisos</span></a>`;
 
   const avatarHtml = u.foto 
     ? `<img src="${u.foto}" class="avatar" style="width:36px; height:36px; object-fit: cover; border-radius: 50%;" />`

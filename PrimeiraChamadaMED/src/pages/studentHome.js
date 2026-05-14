@@ -35,7 +35,6 @@ async function renderStudentHome(user) {
             </button>
           </div>
         </section>
-        ...
         
         ${buildProgressBar(planner)}
         ${buildPlannerGrid(planner, false)}

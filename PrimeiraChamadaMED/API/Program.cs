@@ -88,6 +88,11 @@ using (var db = OpenDb()) {
             alt.CommandText = "ALTER TABLE USUARIO ADD COLUMN data_ultima_ofensiva TEXT DEFAULT '';";
             alt.ExecuteNonQuery();
         } catch { }
+        try {
+        var alt = db.CreateCommand();
+        alt.CommandText = "ALTER TABLE PLANNER_ITEM ADD COLUMN tempo_gasto_segundos INTEGER DEFAULT 0;";
+        alt.ExecuteNonQuery();
+        } catch { }
     }
     
     AddColumn("PLANNER_ITEM", "time", "TEXT");
@@ -349,6 +354,14 @@ app.MapPut("/api/planner/{id:long}", async (long id, HttpRequest request) => {
             cmd.Parameters.AddWithValue("$done", dv.ValueKind == JsonValueKind.True ? 1 : 0);
             cmd.Parameters.AddWithValue("$id", id);
             cmd.ExecuteNonQuery();
+        }
+        if (root.TryGetProperty("tempo_gasto", out var tempoElement)) {
+            var cmdTempo = db.CreateCommand();
+            cmdTempo.CommandText = "UPDATE PLANNER_ITEM SET tempo_gasto_segundos = $tempo WHERE id = $id";
+            // Pega o número de segundos enviado pelo Javascript
+            cmdTempo.Parameters.AddWithValue("$tempo", tempoElement.GetInt32());
+            cmdTempo.Parameters.AddWithValue("$id", id);
+            cmdTempo.ExecuteNonQuery();
         }
 
         // 2. BUSCA O DONO DA TAREFA E O TOTAL DE HORAS DELE HOJE

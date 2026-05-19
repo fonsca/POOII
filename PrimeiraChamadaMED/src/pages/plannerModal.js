@@ -2,21 +2,45 @@
 function showPlannerModal(params) {
   const { mode, task, day, time, onSave, onDelete, onToggle } = params;
   
-  // Cria o fundo escuro do modal
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   
-  // Textos e variáveis com base no Modo (create, edit, view)
   const isMentor = mode === 'create' || mode === 'edit';
   const modalTitle = mode === 'create' ? 'NOVO BLOCO DE ESTUDO' : (mode === 'edit' ? 'EDITAR BLOCO' : 'DETALHES DO ESTUDO');
   const dayText = task ? task.day : day;
   const timeText = task ? task.time : time;
+  const tempoInicial = task?.tempo_gasto_segundos || 0;
+
+  // 1. Cronômetro atualizado com o botão de ZERAR
+  const cronometroHtml = `
+  <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; text-align: center; margin: 15px 0; border: 1px solid #e2e8f0;">
+    <div style="font-size: 0.85rem; color: #64748b; font-weight: bold; text-transform: uppercase;">Tempo de Foco</div>
+    
+    <div id="cronometro-display" style="font-size: 2.5rem; font-weight: bold; color: var(--navy); font-variant-numeric: tabular-nums; margin: 10px 0;">
+      00:00:00
+    </div>
+    
+    <div style="display: flex; gap: 10px; justify-content: center;">
+      <button type="button" id="btn-iniciar-cronometro" class="btn" style="background-color: #10b981; width: 110px;">
+        ▶ Iniciar
+      </button>
+      <button type="button" id="btn-parar-cronometro" class="btn" style="background-color: #ef4444; width: 110px; display: none;">
+        ⏹ Parar
+      </button>
+      <button type="button" id="btn-zerar-cronometro" class="btn" style="background-color: #64748b; width: 110px;">
+        🔄 Zerar
+      </button>
+    </div>
+  </div>
+  `;
 
   const studentView = task ? `
     <div style="background: rgba(229,231,235,0.4); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
       <h4 style="margin: 0; color: var(--navy); font-size: 1.1rem;">${task.topic}</h4>
       <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #475569; white-space: pre-wrap;">${task.subtopics || 'Sem detalhes adicionais.'}</p>
     </div>
+    
+    ${cronometroHtml}
     
     <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
       <button id="modal-toggle-btn" class="btn" style="width: 100%; padding: 12px; font-size: 1rem; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; color: white; background-color: ${task.done ? '#64748b' : '#10b981'}; transition: background-color 0.2s;">
@@ -25,7 +49,6 @@ function showPlannerModal(params) {
     </div>
   ` : '';
 
-  // CONTEÚDO PARA O MENTOR (Formulário de criação/edição)
   const mentorForm = `
     <form id="modal-form">
       <div class="field">
@@ -57,7 +80,6 @@ function showPlannerModal(params) {
     </form>
   `;
 
-  // Monta o HTML final do Popup
   overlay.innerHTML = `
     <div class="modal-content">
       <button class="modal-close" id="modal-close-btn">✕</button>
@@ -69,12 +91,97 @@ function showPlannerModal(params) {
 
   document.body.appendChild(overlay);
 
-  // Fecha o modal se clicar no "X" ou fora dele
   const closeModal = () => document.body.removeChild(overlay);
   overlay.querySelector('#modal-close-btn').onclick = closeModal;
   overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-  // Lógica dos Botões baseada no Modo
+  // --- LÓGICA DO CRONÔMETRO BLINDADA CONTRA RECARREGAMENTO ---
+  if (!isMentor && task) {
+    let timerInterval;
+    let segundosAcumulados = tempoInicial;
+    
+    const display = overlay.querySelector('#cronometro-display');
+    const btnIniciar = overlay.querySelector('#btn-iniciar-cronometro');
+    const btnParar = overlay.querySelector('#btn-parar-cronometro');
+    const btnZerar = overlay.querySelector('#btn-zerar-cronometro');
+
+    if (display && btnIniciar && btnParar && btnZerar) {
+      const formatarTempo = (totalSegundos) => {
+        const h = Math.floor(totalSegundos / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSegundos % 3600) / 60).toString().padStart(2, '0');
+        const s = (totalSegundos % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+      };
+
+      display.innerText = formatarTempo(segundosAcumulados);
+      if (segundosAcumulados > 0) btnIniciar.innerText = '▶ Continuar';
+
+      // EVENTO: INICIAR
+      btnIniciar.onclick = (e) => {
+        e.preventDefault(); // Impede o recarregamento
+        e.stopPropagation();
+        
+        btnIniciar.style.display = 'none';
+        btnZerar.style.display = 'none'; // Esconde o zerar enquanto roda
+        btnParar.style.display = 'inline-block';
+        
+        timerInterval = setInterval(() => {
+          segundosAcumulados++;
+          display.innerText = formatarTempo(segundosAcumulados);
+        }, 1000);
+      };
+
+      // EVENTO: PARAR
+      btnParar.onclick = async (e) => {
+        e.preventDefault(); // Impede o recarregamento da tela!
+        e.stopPropagation();
+        
+        clearInterval(timerInterval); 
+        btnParar.style.display = 'none';
+        btnIniciar.style.display = 'inline-block';
+        btnZerar.style.display = 'inline-block'; // Mostra o zerar novamente
+        btnIniciar.innerText = '▶ Continuar'; 
+
+        display.innerText = formatarTempo(segundosAcumulados);
+
+        try {
+          // Salva no banco em silêncio
+          await api(`/planner/${task.id}`, { 
+            method: 'PUT',
+            body: JSON.stringify({ tempo_gasto: segundosAcumulados })
+          });
+          task.tempo_gasto_segundos = segundosAcumulados; // Grava na memória
+        } catch (err) {
+          console.error("Erro ao sincronizar cronômetro:", err.message);
+        }
+      };
+
+      // EVENTO: ZERAR
+      btnZerar.onclick = async (e) => {
+        e.preventDefault(); // Impede o recarregamento
+        e.stopPropagation();
+
+        if (!confirm("Tem certeza que deseja zerar o tempo deste estudo?")) return;
+
+        clearInterval(timerInterval);
+        segundosAcumulados = 0;
+        display.innerText = formatarTempo(0);
+        btnIniciar.innerText = '▶ Iniciar';
+
+        try {
+          await api(`/planner/${task.id}`, { 
+            method: 'PUT',
+            body: JSON.stringify({ tempo_gasto: 0 })
+          });
+          task.tempo_gasto_segundos = 0; // Zera na memória
+        } catch (err) {
+          console.error("Erro ao zerar cronômetro:", err.message);
+        }
+      };
+    }
+  }
+
+  // --- LÓGICA DOS BOTÕES DE SALVAR/EDITAR/CONCLUIR ---
   if (isMentor) {
     overlay.querySelector('#modal-form').onsubmit = async (e) => {
       e.preventDefault();
@@ -96,6 +203,7 @@ function showPlannerModal(params) {
 
     if (mode === 'edit') {
       overlay.querySelector('#modal-delete-btn').onclick = async (e) => {
+        e.preventDefault();
         if (confirm("Tem certeza que deseja apagar este bloco?")) { 
           const btn = e.target;
           btn.textContent = "Apagando...";
@@ -110,14 +218,14 @@ function showPlannerModal(params) {
       };
     }
   } else {
-    // 👇 A LÓGICA DO BOTÃO DO ALUNO
     const toggleBtn = overlay.querySelector('#modal-toggle-btn');
     if (toggleBtn) {
-      toggleBtn.onclick = async () => { 
+      toggleBtn.onclick = async (e) => { 
+        e.preventDefault();
         toggleBtn.disabled = true; 
         toggleBtn.textContent = "Atualizando...";
         try {
-          await onToggle(task); // Salva no Banco e Recarrega a Tela
+          await onToggle(task); 
           closeModal(); 
         } catch(err) {
           alert("Erro ao atualizar status: " + err.message);

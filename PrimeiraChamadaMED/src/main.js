@@ -52,12 +52,20 @@ const SUBJECTS = {
   rev: { class: "rev", label: "🔄 Revisão" }
 };
 
-function buildPlannerGrid(planner, isMentor) {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; 
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + diffToMonday);
+// -------- DESENHA A TABELA DO PLANNER --------
+function buildPlannerGrid(planner, isMentor, semanaAtual = "") {
+  let monday;
+  const todayReal = new Date(); // Guarda o dia de hoje real para destacar a coluna
+  
+  // 👉 ATUALIZADO: Se recebeu uma semana específica, usa ela. Senão, calcula a de hoje.
+  if (semanaAtual) {
+    monday = new Date(semanaAtual + 'T00:00:00'); // T00:00:00 evita bugs de fuso horário
+  } else {
+    const dayOfWeek = todayReal.getDay();
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; 
+    monday = new Date(todayReal);
+    monday.setDate(todayReal.getDate() + diffToMonday);
+  }
 
   const dayNamesFull = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
   const dayNamesShort = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
@@ -70,7 +78,8 @@ function buildPlannerGrid(planner, isMentor) {
       full: dayNamesFull[i],
       short: dayNamesShort[i],
       num: String(currentDate.getDate()).padStart(2, '0'),
-      isToday: currentDate.toDateString() === today.toDateString()
+      // Só destaca se o dia daquela célula for exatemente o dia de hoje no mundo real
+      isToday: currentDate.toDateString() === todayReal.toDateString() 
     });
   }
 
@@ -94,7 +103,7 @@ function buildPlannerGrid(planner, isMentor) {
     if (time === "12:00") {
       html += `<tr>
         <td colspan="8" style="text-align:center; padding:10px; font-size:10px; color:var(--muted-fg); font-weight:800; letter-spacing:1px; background:rgba(229,231,235,0.2); border-radius:8px;">
-          🍽️ INTERVALO / ALMOÇO (11:00 - 12:00)
+          🍽️ INTERVALO (11:00 - 12:00)
         </td>
       </tr>`;
     }
@@ -104,13 +113,13 @@ function buildPlannerGrid(planner, isMentor) {
     daysInfo.forEach(d => {
       const task = planner.find(p => p.day === d.full && p.time === time);
       if (!task) {
+        // Célula vazia (Mentor pode clicar para criar)
         html += `<td class="planner-cell ${isMentor ? 'empty-cell' : ''}" 
                      ${isMentor ? `data-action="create" data-day="${d.full}" data-time="${time}"` : ''}>
                  </td>`;
       } else {
         const sub = SUBJECTS[task.subject] || { class: "rev" };
         const nextHour = String(Number(time.split(":")[0]) + 1).padStart(2, '0') + ":00";
-        const doneClass = task.done ? 'opacity: 0.4; filter: grayscale(100%); text-decoration: line-through;' : '';
         html += `
           <td class="planner-cell">
             <div class="planner-block ${sub.class} ${task.done ? 'is-done' : ''}" 
@@ -130,19 +139,15 @@ function buildPlannerGrid(planner, isMentor) {
   return html;
 }
 
-
 // -------- BARRA DE PROGRESSO --------
 function buildProgressBar(planner) {
-  // Filtra os "fantasmas" (ignora testes antigos que não têm horário válido definido)
-  const validBlocks = planner.filter(p => p.time && p.time.trim() !== "");
+  // 👉 ATUALIZADO: Conta todos os blocos do planner
+  const validBlocks = planner || [];
 
-  // Se não houver blocos válidos na semana, a barra nem aparece
-  if (!validBlocks || validBlocks.length === 0) return ''; 
+  if (validBlocks.length === 0) return ''; 
 
   const total = validBlocks.length;
   const completed = validBlocks.filter(p => p.done).length;
-  
-  // Regra de três simples para a porcentagem
   const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
 
   return `
@@ -154,13 +159,9 @@ function buildProgressBar(planner) {
         </div>
       </div>
       
-      <!-- O Container da Barra (Fundo Azul) -->
       <div style="background-color: #3b82f6; height: 28px; width: 100%; border-radius: 14px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); position: relative;">
-        
-        <!-- O Preenchimento da Barra (Amarelo Vibrante com animação) -->
         <div style="background-color: #fbbf24; height: 100%; width: ${percentage}%; border-radius: 14px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 2px 0 5px rgba(0,0,0,0.1);"></div>
         
-        <!-- A Porcentagem centralizada -->
         <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.9rem; color: #ffffff; text-shadow: 1px 1px 3px rgba(0,0,0,0.6); pointer-events: none;">
           ${percentage}%
         </div>
@@ -213,6 +214,9 @@ function render() {
   }
 }
 
+
+
+
 // -------- TELA DE EDITAR CADASTRO DO ALUNO --------
 async function renderEditStudent(mentor, studentId) {
   try {
@@ -251,9 +255,10 @@ async function renderEditStudent(mentor, studentId) {
             </div>
           </div>
 
-          <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+          <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px;">
             <button type="submit" class="btn" style="background: #10b981; font-size: 1rem; padding: 10px 24px;">Salvar Alterações</button>
-            <button class="btn-cancel" onclick="navigate('#/admin/aluno/${studentId}')">Cancelar</button>
+            <!-- Tivemos o onclick daqui e adicionamos um ID exclusivo -->
+            <button type="button" id="btn-cancel-edit" class="btn" style="background: #ef4444; color: white; font-size: 1rem; padding: 10px 24px;">Cancelar</button>
           </div>
 
         </form>
@@ -290,6 +295,11 @@ async function renderEditStudent(mentor, studentId) {
         btn.disabled = false;
         btn.textContent = "💾 Salvar Alterações";
       }
+    };
+    // 3. Lógica EXCLUSIVA e blindada para o botão Cancelar
+    document.getElementById('btn-cancel-edit').onclick = (e) => {
+      e.preventDefault(); // Proíbe terminantemente o navegador de enviar o formulário
+      navigate(`#/admin/aluno/${studentId}`); // Volta para a tela anterior
     };
 
   } catch (err) {
@@ -642,10 +652,14 @@ async function renderAdmin(user) {
   try {
     // 1. Busca a lista de alunos atrelados a este mentor
     const students = await api(`/students?mentorId=${user.id}`);
-    
-    // 2. Busca o planner de cada aluno para calcular o progresso
+        
+    // 2. Busca o planner e os detalhes completos de cada aluno
     const studentsWithProgress = await Promise.all(students.map(async (student) => {
       const data = await api(`/students/${student.id}`);
+      
+      // 👉 A MÁGICA AQUI: Pega os detalhes atualizados do aluno (QUE CONTÉM A FOTO!)
+      const alunoDetalhado = data.student || data; 
+      
       const planner = data.planner || [];
       
       // Mesma lógica de ignorar os blocos fantasmas
@@ -654,8 +668,8 @@ async function renderAdmin(user) {
       const completed = validBlocks.filter(p => p.done).length;
       const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
       
-      // Devolve o aluno com as estatísticas embutidas
-      return { ...student, total, completed, percentage };
+      // 👉 Devolve o aluno DETALHADO (com foto) com as estatísticas embutidas
+      return { ...alunoDetalhado, total, completed, percentage };
     }));
 
     // 3. Monta o visual do Dashboard
@@ -685,6 +699,10 @@ async function renderAdmin(user) {
         else if (s.percentage === 100) barColor = "#10b981"; // Verde (Tudo concluído!)
         else if (s.percentage <= 30) barColor = "#ef4444"; // Vermelho (Alerta de atraso!)
 
+        const cardAvatarHtml = s.foto 
+          ? `<img src="${s.foto}" class="avatar" style="width: 48px; height: 48px; object-fit: cover; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" />`
+          : `<div class="avatar" style="width: 48px; height: 48px; font-size: 1.2rem; background-color: var(--gold);">${initials(s.name)}</div>`;
+
         html += `
           <div style="background: white; border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.2s;" 
                onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 10px 15px -3px rgba(0,0,0,0.1)'; this.style.borderColor='#cbd5e0';" 
@@ -694,7 +712,7 @@ async function renderAdmin(user) {
             
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem;">
               <div style="display: flex; align-items: center; gap: 12px;">
-                <div class="avatar" style="width: 48px; height: 48px; font-size: 1.2rem; background-color: var(--gold);">${initials(s.name)}</div>
+                ${cardAvatarHtml}
                 <div>
                   <h3 style="margin: 0; font-size: 1.1rem; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${s.name}</h3>
                   <span style="font-size: 0.75rem; color: #475569; background: #f1f5f9; padding: 3px 8px; border-radius: 12px; font-weight: 600;">${s.course}</span>
@@ -730,6 +748,37 @@ async function renderAdmin(user) {
     bindHeader();
   }
 }
+
+// Soma ou subtrai dias de uma data "YYYY-MM-DD"
+window.calcularNovaSemana = (dataBase, dias) => {
+  const d = new Date(dataBase + 'T00:00:00'); // O 'T00:00:00' evita bugs de fuso horário brasileiro
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().split('T')[0]; 
+};
+
+// Transforma "2026-06-01" em "Semana de 01/06/2026"
+window.formatarLabelSemana = (dataBase) => {
+  if (!dataBase) return "";
+  const [ano, mes, dia] = dataBase.split('-');
+  return `Semana de ${dia}/${mes}/${ano}`;
+};
+
+// Função acionada ao clicar nos botões de ⬅️ e ➡️
+window.navegarSemanaAluno = (dataAtual, dias) => {
+  const novaSemana = calcularNovaSemana(dataAtual, dias);
+  
+  // Pega o usuário da memória global que vamos criar no passo 2
+  const user = window.usuarioAtual; 
+  
+  if (!user) {
+      alert("Erro na sessão. Por favor, recarregue a página.");
+      return;
+  }
+  
+  // Recarrega a tela passando a nova data!
+  renderStudentHome(user, novaSemana); 
+};
+
 
 // -------- TELA DE PERFIL (SOMENTE UPLOAD DE FOTO) --------
 async function renderProfile(currentUser, targetUserId) {

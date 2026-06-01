@@ -93,6 +93,11 @@ using (var db = OpenDb()) {
         alt.CommandText = "ALTER TABLE PLANNER_ITEM ADD COLUMN tempo_gasto_segundos INTEGER DEFAULT 0;";
         alt.ExecuteNonQuery();
         } catch { }
+        try {
+            var cmdSemana = db.CreateCommand();
+            cmdSemana.CommandText = "ALTER TABLE PLANNER_ITEM ADD COLUMN data_semana TEXT DEFAULT '';";
+            cmdSemana.ExecuteNonQuery();
+        } catch { }
     }
     
     AddColumn("PLANNER_ITEM", "time", "TEXT");
@@ -188,6 +193,55 @@ app.MapGet("/api/students", (long mentorId) => {
     }
 });
 
+// POST /api/planner
+app.MapPost("/api/planner", async (HttpRequest request) => {
+    try {
+        using var body = await JsonDocument.ParseAsync(request.Body);
+        var root = body.RootElement;
+        
+        // Pega os dados básicos
+        long userId = root.GetProperty("userId").GetInt64();
+        string day = root.GetProperty("day").GetString() ?? "";
+        string subject = root.GetProperty("subject").GetString() ?? "";
+        string topic = root.GetProperty("topic").GetString() ?? "";
+        string time = root.GetProperty("time").GetString() ?? "";
+        string subtopics = root.GetProperty("subtopics").GetString() ?? "";
+        
+        // 👉 ATUALIZADO: Pega a semana do Javascript (ou calcula hoje se vier vazio)
+        string dataSemana = "";
+        if (root.TryGetProperty("data_semana", out var semanaProp)) {
+            dataSemana = semanaProp.GetString() ?? "";
+        }
+        if (string.IsNullOrEmpty(dataSemana)) {
+            DateTime hoje = DateTime.Now;
+            int diff = (7 + (hoje.DayOfWeek - DayOfWeek.Monday)) % 7;
+            dataSemana = hoje.AddDays(-1 * diff).ToString("yyyy-MM-dd");
+        }
+
+        using var db = OpenDb();
+        var cmd = db.CreateCommand();
+        // 👉 ATUALIZADO: Inserindo a coluna data_semana
+        cmd.CommandText = @"
+            INSERT INTO PLANNER_ITEM (id_usuario, day, subject, topic, hours, done, time, subtopics, tempo_gasto_segundos, data_semana)
+            VALUES ($uid, $day, $subject, $topic, 0, 0, $time, $subtopics, 0, $semana);
+            SELECT last_insert_rowid();";
+            
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$day", day);
+        cmd.Parameters.AddWithValue("$subject", subject);
+        cmd.Parameters.AddWithValue("$topic", topic);
+        cmd.Parameters.AddWithValue("$time", time);
+        cmd.Parameters.AddWithValue("$subtopics", subtopics);
+        cmd.Parameters.AddWithValue("$semana", dataSemana);
+        
+        var newId = (long)cmd.ExecuteScalar()!;
+        return Results.Ok(new { id = newId });
+    } catch (Exception ex) {
+        return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
+    }
+});
+
+
 // POST /api/students
 app.MapPost("/api/students", async (HttpRequest request) => {
     try {
@@ -242,12 +296,19 @@ app.MapPost("/api/students", async (HttpRequest request) => {
     }
 });
 
-// GET /api/students/{id:long}
-app.MapGet("/api/students/{id:long}", (long id) => {
+// GET /api/students/{id:long}?semana={data}
+app.MapGet("/api/students/{id:long}", (long id, string semana) => {
     try {
         using var db = OpenDb();
+        
+        // Se não informou a semana, descobre a Segunda-feira desta semana
+        if (string.IsNullOrEmpty(semana)) {
+            DateTime hoje = DateTime.Now;
+            int diff = (7 + (hoje.DayOfWeek - DayOfWeek.Monday)) % 7;
+            semana = hoje.AddDays(-1 * diff).ToString("yyyy-MM-dd");
+        }
+
         var sc = db.CreateCommand();
-        // ADICIONADO: u.foto, u.streak_estudos
         sc.CommandText = @"
             SELECT u.id_usuario, u.nome, u.email, sp.course, sp.phone, u.foto, u.streak_estudos
             FROM USUARIO u
@@ -270,22 +331,28 @@ app.MapGet("/api/students/{id:long}", (long id) => {
         sr.Close();
 
         var pc = db.CreateCommand();
-        pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
+        // 👉 ATUALIZADO: SELECT novo e filtro WHERE data_semana = $semana
+        pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics, tempo_gasto_segundos, data_semana FROM PLANNER_ITEM WHERE id_usuario = $uid AND data_semana = $semana ORDER BY id";
         pc.Parameters.AddWithValue("$uid", id);
+        pc.Parameters.AddWithValue("$semana", semana);
         var planner = new List<object>();
         using var pr = pc.ExecuteReader();
+        
         while (pr.Read())
             planner.Add(new {
-                id        = pr.GetInt64(0),
-                day       = pr.GetString(1),
-                subject   = pr.GetString(2),
-                topic     = pr.GetString(3),
-                hours     = pr.GetDouble(4),
-                done      = pr.GetInt64(5) == 1,
-                time      = pr.IsDBNull(6) ? "" : pr.GetString(6),
-                subtopics = pr.IsDBNull(7) ? "" : pr.GetString(7)
+                id                   = pr.GetInt64(0),
+                day                  = pr.GetString(1),
+                subject              = pr.GetString(2),
+                topic                = pr.GetString(3),
+                hours                = pr.GetDouble(4),
+                done                 = pr.GetInt64(5) == 1,
+                time                 = pr.IsDBNull(6) ? "" : pr.GetString(6),
+                subtopics            = pr.IsDBNull(7) ? "" : pr.GetString(7),
+                tempo_gasto_segundos = pr.IsDBNull(8) ? 0 : pr.GetInt32(8),
+                data_semana          = pr.IsDBNull(9) ? "" : pr.GetString(9)
             });
-        return Results.Ok(new { student, planner });
+            
+        return Results.Ok(new { student, planner, semanaAtual = semana });
     } catch (Exception ex) {
         return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
     }
@@ -431,10 +498,18 @@ app.MapDelete("/api/planner/{id:long}", (long id) => {
     }
 });
 
-// GET /api/me/planner?userId={id}
-app.MapGet("/api/me/planner", (long userId) => {
+// GET /api/me/planner?userId={id}&semana={data}
+app.MapGet("/api/me/planner", (long userId, string semana) => {
     try {
         using var db = OpenDb();
+        
+        // Se não mandou qual semana quer ver, pega a Segunda-feira da semana atual
+        if (string.IsNullOrEmpty(semana)) {
+            DateTime hoje = DateTime.Now;
+            int diff = (7 + (hoje.DayOfWeek - DayOfWeek.Monday)) % 7;
+            semana = hoje.AddDays(-1 * diff).ToString("yyyy-MM-dd");
+        }
+
         var sc = db.CreateCommand();
         sc.CommandText = @"
             SELECT u.id_usuario, u.nome, u.email, sp.course
@@ -445,6 +520,7 @@ app.MapGet("/api/me/planner", (long userId) => {
         using var sr = sc.ExecuteReader();
         if (!sr.Read())
             return Results.Ok(new { student = (object)null, planner = new List<object>() });
+        
         var student = new {
             id     = sr.GetInt64(0),
             name   = sr.GetString(1),
@@ -454,22 +530,28 @@ app.MapGet("/api/me/planner", (long userId) => {
         sr.Close();
 
         var pc = db.CreateCommand();
-        pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics FROM PLANNER_ITEM WHERE id_usuario = $uid ORDER BY id";
+        // 👉 ATUALIZADO: Trouxe a data_semana e o tempo_gasto_segundos, e filtra pela semana!
+        pc.CommandText = "SELECT id, day, subject, topic, hours, done, time, subtopics, tempo_gasto_segundos, data_semana FROM PLANNER_ITEM WHERE id_usuario = $uid AND data_semana = $semana ORDER BY id";
         pc.Parameters.AddWithValue("$uid", userId);
+        pc.Parameters.AddWithValue("$semana", semana);
         var planner = new List<object>();
+        
         using var pr = pc.ExecuteReader();
         while (pr.Read())
             planner.Add(new {
-                id        = pr.GetInt64(0),
-                day       = pr.GetString(1),
-                subject   = pr.GetString(2),
-                topic     = pr.GetString(3),
-                hours     = pr.GetDouble(4),
-                done      = pr.GetInt64(5) == 1,
-                time      = pr.IsDBNull(6) ? "" : pr.GetString(6),
-                subtopics = pr.IsDBNull(7) ? "" : pr.GetString(7)
+                id                   = pr.GetInt64(0),
+                day                  = pr.GetString(1),
+                subject              = pr.GetString(2),
+                topic                = pr.GetString(3),
+                hours                = pr.GetDouble(4),
+                done                 = pr.GetInt64(5) == 1,
+                time                 = pr.IsDBNull(6) ? "" : pr.GetString(6),
+                subtopics            = pr.IsDBNull(7) ? "" : pr.GetString(7),
+                tempo_gasto_segundos = pr.IsDBNull(8) ? 0 : pr.GetInt32(8), // Pega o tempo do cronômetro!
+                data_semana          = pr.IsDBNull(9) ? "" : pr.GetString(9)
             });
-        return Results.Ok(new { student, planner });
+            
+        return Results.Ok(new { student, planner, semanaAtual = semana });
     } catch (Exception ex) {
         return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
     }

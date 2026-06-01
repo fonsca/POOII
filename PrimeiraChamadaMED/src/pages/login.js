@@ -25,7 +25,7 @@ function renderLogin(type) {
               <button type="button" onclick="togglePwd('login-pwd', this)" class="pwd-toggle-btn" title="Mostrar/Ocultar senha">
                 <img src="img/olho-aberto.png" alt="Olho" class="eye-img" />
               </button>
-            </div>  
+            </div> 
           </div>
           <button type="submit" class="btn">Entrar</button>
           <p id="msg" class="error"></p>

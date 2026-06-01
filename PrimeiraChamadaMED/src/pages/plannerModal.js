@@ -192,7 +192,15 @@ function showPlannerModal(params) {
       submitBtn.disabled = true;
 
       try {
-        await onSave(Object.fromEntries(fd), dayText, timeText, task?.id);
+        // Pega os dados do formulário
+        const payload = Object.fromEntries(fd);
+        
+        // 👉 A MÁGICA: Injeta a semana atual global no objeto antes de salvar!
+        // Se window.semanaAtivaMentor existir, usa ela. Senão, vai vazio para o C# calcular.
+        payload.data_semana = window.semanaAtivaMentor || ""; 
+
+        // Chama a função onSave original passando o objeto modificado
+        await onSave(payload, dayText, timeText, task?.id);
         closeModal();
       } catch (err) {
         alert("Erro ao salvar no banco de dados: " + err.message);
@@ -200,23 +208,6 @@ function showPlannerModal(params) {
         submitBtn.disabled = false;
       }
     };
-
-    if (mode === 'edit') {
-      overlay.querySelector('#modal-delete-btn').onclick = async (e) => {
-        e.preventDefault();
-        if (confirm("Tem certeza que deseja apagar este bloco?")) { 
-          const btn = e.target;
-          btn.textContent = "Apagando...";
-          try {
-            await onDelete(task.id); 
-            closeModal();
-          } catch (err) {
-            alert("Erro ao excluir: " + err.message);
-            btn.textContent = "Excluir";
-          }
-        }
-      };
-    }
   } else {
     const toggleBtn = overlay.querySelector('#modal-toggle-btn');
     if (toggleBtn) {

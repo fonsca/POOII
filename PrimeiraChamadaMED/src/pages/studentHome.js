@@ -79,7 +79,7 @@ async function renderStudentHome(user, semana = "") {
         timeDiv.style.fontSize = '0.75rem';
         timeDiv.style.marginTop = '6px';
         timeDiv.style.fontWeight = '600';
-        timeDiv.style.color = task.done ? 'rgba(255, 255, 255, 0.85)' : '#475569'; 
+        timeDiv.style.color = task.done ? 'rgba(0, 0, 0, 0.85)' : '#000000'; 
         timeDiv.innerHTML = `⏱️ ${tempoStr}`;
         el.appendChild(timeDiv);
       }

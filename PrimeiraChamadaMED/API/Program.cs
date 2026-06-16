@@ -221,9 +221,10 @@ app.MapPost("/api/planner", async (HttpRequest request) => {
         using var db = OpenDb();
         var cmd = db.CreateCommand();
         // 👉 ATUALIZADO: Inserindo a coluna data_semana
-        cmd.CommandText = @"
-            INSERT INTO PLANNER_ITEM (id_usuario, day, subject, topic, hours, done, time, subtopics, tempo_gasto_segundos, data_semana)
-            VALUES ($uid, $day, $subject, $topic, 0, 0, $time, $subtopics, 0, $semana);
+        cmd.CommandText = @"INSERT INTO PLANNER_ITEM 
+                    (id_usuario, subject, topic, subtopics, day, time, hours, done, data_semana) 
+                    VALUES 
+                    ($uid, $sub, $top, $subtop, $day, $time, $hours, $done, $semana);
             SELECT last_insert_rowid();";
             
         cmd.Parameters.AddWithValue("$uid", userId);
@@ -232,7 +233,7 @@ app.MapPost("/api/planner", async (HttpRequest request) => {
         cmd.Parameters.AddWithValue("$topic", topic);
         cmd.Parameters.AddWithValue("$time", time);
         cmd.Parameters.AddWithValue("$subtopics", subtopics);
-        cmd.Parameters.AddWithValue("$semana", dataSemana);
+        cmd.Parameters.AddWithValue("$semana", root.TryGetProperty("data_semana", out var sem) ? sem.GetString() ?? "" : "");
         
         var newId = (long)cmd.ExecuteScalar()!;
         return Results.Ok(new { id = newId });
@@ -418,23 +419,25 @@ app.MapPut("/api/planner/{id:long}", async (long id, HttpRequest request) => {
         if (root.TryGetProperty("subject", out var subElement)) {
             var cmdConteudo = db.CreateCommand();
             
-            // 👉 O SEGREDO ESTÁ AQUI: "subtopics = $subtop" tem que estar no UPDATE
+            // 👉 ADICIONADO: data_semana = $semana
             cmdConteudo.CommandText = @"UPDATE PLANNER_ITEM 
                                         SET subject = $sub, 
                                             topic = $top, 
                                             subtopics = $subtop, 
                                             day = $day, 
-                                            time = $time 
+                                            time = $time,
+                                            data_semana = $semana
                                         WHERE id = $id";
                                         
             cmdConteudo.Parameters.AddWithValue("$sub", subElement.GetString() ?? "");
             cmdConteudo.Parameters.AddWithValue("$top", root.TryGetProperty("topic", out var top) ? top.GetString() ?? "" : "");
-            
-            // 👉 E AQUI: O parâmetro sendo passado para o banco
             cmdConteudo.Parameters.AddWithValue("$subtop", root.TryGetProperty("subtopics", out var subtop) ? subtop.GetString() ?? "" : "");
-            
             cmdConteudo.Parameters.AddWithValue("$day", root.TryGetProperty("day", out var day) ? day.GetString() ?? "" : "");
             cmdConteudo.Parameters.AddWithValue("$time", root.TryGetProperty("time", out var time) ? time.GetString() ?? "" : "");
+            
+            // 👉 ADICIONADO: Pega a semana que veio do JavaScript
+            cmdConteudo.Parameters.AddWithValue("$semana", root.TryGetProperty("data_semana", out var sem) ? sem.GetString() ?? "" : "");
+            
             cmdConteudo.Parameters.AddWithValue("$id", id);
             cmdConteudo.ExecuteNonQuery();
         }

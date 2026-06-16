@@ -83,6 +83,7 @@ async function renderStudent(mentor, id, semana = "") {
           onSave: async (formData, mDay, mTime) => {
             try {
               // 👉 BLINDAGEM ATUALIZADA: Permite que você apague os textos se quiser
+              // 👉 BLINDAGEM CORRIGIDA: Agora enviamos a semana exata para o C#
               const payload = { 
                 subject: formData.subject !== undefined ? formData.subject : (task ? task.subject : ''),
                 topic: formData.topic !== undefined ? formData.topic : (task ? task.topic : ''),
@@ -91,7 +92,8 @@ async function renderStudent(mentor, id, semana = "") {
                 time: mTime || (task ? task.time : ''), 
                 done: task ? task.done : false, 
                 hours: 1, 
-                userId: id 
+                userId: id,
+                data_semana: formData.data_semana || (task ? task.data_semana : window.semanaAtivaMentor)
               };
 
               if (action === 'create') {

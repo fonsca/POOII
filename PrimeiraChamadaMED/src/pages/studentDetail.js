@@ -71,31 +71,47 @@ async function renderStudent(mentor, id, semana = "") {
         const target = e.target.closest('[data-action]');
         if (!target) return;
         const action = target.dataset.action;
-        const task = action === 'edit' ? planner.find(p => p.id === Number(target.dataset.id)) : null;
+        
+        // Acha a tarefa correta baseada no ID clicado
+        const task = action === 'edit' ? planner.find(p => String(p.id) === String(target.dataset.id)) : null;
 
         showPlannerModal({
           mode: action,
-          day: target.dataset.day,
-          time: target.dataset.time,
+          day: target.dataset.day || (task ? task.day : ''),
+          time: target.dataset.time || (task ? task.time : ''),
           task: task,
-          onSave: async (formData, mDay, mTime, mId) => {
-            // formData.data_semana já é injetado pelo Modal mágico que fizemos hoje!
-            // Adicionamos o userId para o C# saber de qual aluno é a tarefa
-            const payload = { ...formData, day: mDay, time: mTime, done: false, hours: 1, userId: id };
-            
-            if (action === 'create') {
-              await api(`/planner`, { method: "POST", body: JSON.stringify(payload) });
-            } else {
-              await api(`/planner/${mId}`, { method: "PUT", body: JSON.stringify({...task, ...payload}) });
+          onSave: async (formData, mDay, mTime) => {
+            try {
+              // 👉 BLINDAGEM ATUALIZADA: Permite que você apague os textos se quiser
+              const payload = { 
+                subject: formData.subject !== undefined ? formData.subject : (task ? task.subject : ''),
+                topic: formData.topic !== undefined ? formData.topic : (task ? task.topic : ''),
+                subtopics: formData.subtopics !== undefined ? formData.subtopics : (task ? task.subtopics : ''), 
+                day: mDay || (task ? task.day : ''), 
+                time: mTime || (task ? task.time : ''), 
+                done: task ? task.done : false, 
+                hours: 1, 
+                userId: id 
+              };
+
+              if (action === 'create') {
+                await api(`/planner`, { method: "POST", body: JSON.stringify(payload) });
+              } else {
+                await api(`/planner/${task.id}`, { method: "PUT", body: JSON.stringify(payload) });
+              }
+              
+              renderStudent(mentor, id, semanaAtual);
+            } catch (err) {
+              alert("Erro ao salvar: " + err.message);
             }
-            
-            // Recarrega a tela na MESMA semana para mostrar o novo bloco
-            renderStudent(mentor, id, semanaAtual);
           },
-          onDelete: async (delId) => {
-            await api(`/planner/${delId}`, { method: "DELETE" });
-            // Recarrega a tela para sumir com o bloco deletado
-            renderStudent(mentor, id, semanaAtual);
+          onDelete: async () => {
+            try {
+              await api(`/planner/${task.id}`, { method: "DELETE" });
+              renderStudent(mentor, id, semanaAtual);
+            } catch (err) {
+              alert("Erro ao excluir: " + err.message);
+            }
           }
         });
       };

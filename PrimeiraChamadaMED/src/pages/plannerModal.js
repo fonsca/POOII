@@ -183,6 +183,23 @@ function showPlannerModal(params) {
 
   // --- LÓGICA DOS BOTÕES DE SALVAR/EDITAR/CONCLUIR ---
   if (isMentor) {
+    // 👉 CORREÇÃO 1: Adicionando a vida ao botão de EXCLUIR!
+    const deleteBtn = overlay.querySelector('#modal-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.onclick = async (e) => {
+        e.preventDefault();
+        if (!confirm("Tem certeza que deseja excluir este bloco?")) return;
+        
+        deleteBtn.textContent = "Excluindo...";
+        deleteBtn.disabled = true;
+        
+        // Chama a função de deletar que está lá no renderStudent
+        await onDelete();
+        closeModal(); 
+      };
+    }
+
+    // A lógica de Salvar continua igual...
     overlay.querySelector('#modal-form').onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -192,14 +209,8 @@ function showPlannerModal(params) {
       submitBtn.disabled = true;
 
       try {
-        // Pega os dados do formulário
         const payload = Object.fromEntries(fd);
-        
-        // 👉 A MÁGICA: Injeta a semana atual global no objeto antes de salvar!
-        // Se window.semanaAtivaMentor existir, usa ela. Senão, vai vazio para o C# calcular.
         payload.data_semana = window.semanaAtivaMentor || ""; 
-
-        // Chama a função onSave original passando o objeto modificado
         await onSave(payload, dayText, timeText, task?.id);
         closeModal();
       } catch (err) {

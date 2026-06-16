@@ -414,66 +414,91 @@ app.MapPut("/api/planner/{id:long}", async (long id, HttpRequest request) => {
         var root = body.RootElement;
         using var db = OpenDb();
 
-        // 1. Atualiza o status da tarefa (o que você já fazia)
-        var cmd = db.CreateCommand();
-        if (root.TryGetProperty("done", out var dv)) {
-            cmd.CommandText = "UPDATE PLANNER_ITEM SET done = $done WHERE id = $id";
-            cmd.Parameters.AddWithValue("$done", dv.ValueKind == JsonValueKind.True ? 1 : 0);
-            cmd.Parameters.AddWithValue("$id", id);
-            cmd.ExecuteNonQuery();
+        // 1. ATUALIZA OS TEXTOS DA TAREFA
+        if (root.TryGetProperty("subject", out var subElement)) {
+            var cmdConteudo = db.CreateCommand();
+            
+            // 👉 O SEGREDO ESTÁ AQUI: "subtopics = $subtop" tem que estar no UPDATE
+            cmdConteudo.CommandText = @"UPDATE PLANNER_ITEM 
+                                        SET subject = $sub, 
+                                            topic = $top, 
+                                            subtopics = $subtop, 
+                                            day = $day, 
+                                            time = $time 
+                                        WHERE id = $id";
+                                        
+            cmdConteudo.Parameters.AddWithValue("$sub", subElement.GetString() ?? "");
+            cmdConteudo.Parameters.AddWithValue("$top", root.TryGetProperty("topic", out var top) ? top.GetString() ?? "" : "");
+            
+            // 👉 E AQUI: O parâmetro sendo passado para o banco
+            cmdConteudo.Parameters.AddWithValue("$subtop", root.TryGetProperty("subtopics", out var subtop) ? subtop.GetString() ?? "" : "");
+            
+            cmdConteudo.Parameters.AddWithValue("$day", root.TryGetProperty("day", out var day) ? day.GetString() ?? "" : "");
+            cmdConteudo.Parameters.AddWithValue("$time", root.TryGetProperty("time", out var time) ? time.GetString() ?? "" : "");
+            cmdConteudo.Parameters.AddWithValue("$id", id);
+            cmdConteudo.ExecuteNonQuery();
         }
+
+        // 2. ATUALIZA O STATUS (Check de concluído)
+        if (root.TryGetProperty("done", out var dv)) {
+            var cmdStatus = db.CreateCommand();
+            cmdStatus.CommandText = "UPDATE PLANNER_ITEM SET done = $done WHERE id = $id";
+            cmdStatus.Parameters.AddWithValue("$done", dv.ValueKind == JsonValueKind.True ? 1 : 0);
+            cmdStatus.Parameters.AddWithValue("$id", id);
+            cmdStatus.ExecuteNonQuery();
+        }
+
+        // 3. ATUALIZA O TEMPO GASTO
         if (root.TryGetProperty("tempo_gasto", out var tempoElement)) {
             var cmdTempo = db.CreateCommand();
             cmdTempo.CommandText = "UPDATE PLANNER_ITEM SET tempo_gasto_segundos = $tempo WHERE id = $id";
-            // Pega o número de segundos enviado pelo Javascript
             cmdTempo.Parameters.AddWithValue("$tempo", tempoElement.GetInt32());
             cmdTempo.Parameters.AddWithValue("$id", id);
             cmdTempo.ExecuteNonQuery();
         }
 
-        // 2. BUSCA O DONO DA TAREFA E O TOTAL DE HORAS DELE HOJE
-        // (Aqui usamos o dia da semana atual: Seg, Ter, Qua...)
+        // 4. BUSCA O DONO DA TAREFA PARA A LÓGICA DE OFENSIVA (STREAK)
         string[] dias = { "Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado" };
         string hojePt = dias[(int)DateTime.Now.DayOfWeek];
         string hojeData = DateTime.Now.ToString("yyyy-MM-dd");
 
-        // Busca o ID do usuário desta tarefa
         var cmdUser = db.CreateCommand();
         cmdUser.CommandText = "SELECT id_usuario FROM PLANNER_ITEM WHERE id = $id";
         cmdUser.Parameters.AddWithValue("$id", id);
-        long userId = (long)cmdUser.ExecuteScalar()!;
+        
+        var userResult = cmdUser.ExecuteScalar();
+        if (userResult != null && userResult != DBNull.Value) {
+            long userId = (long)userResult;
 
-        // Soma as horas concluídas HOJE
-        var cmdHoras = db.CreateCommand();
-        cmdHoras.CommandText = "SELECT SUM(hours) FROM PLANNER_ITEM WHERE id_usuario = $uid AND day = $day AND done = 1";
-        cmdHoras.Parameters.AddWithValue("$uid", userId);
-        cmdHoras.Parameters.AddWithValue("$day", hojePt);
-        var totalHoje = cmdHoras.ExecuteScalar();
-        double horasConcluidas = (totalHoje == DBNull.Value) ? 0 : Convert.ToDouble(totalHoje);
+            var cmdHoras = db.CreateCommand();
+            cmdHoras.CommandText = "SELECT SUM(hours) FROM PLANNER_ITEM WHERE id_usuario = $uid AND day = $day AND done = 1";
+            cmdHoras.Parameters.AddWithValue("$uid", userId);
+            cmdHoras.Parameters.AddWithValue("$day", hojePt);
+            var totalHoje = cmdHoras.ExecuteScalar();
+            double horasConcluidas = (totalHoje == DBNull.Value) ? 0 : Convert.ToDouble(totalHoje);
 
-        // 3. LÓGICA DA OFENSIVA (STREAK)
-        if (horasConcluidas >= 0.5) { // 30 minutos
-            var cmdCheck = db.CreateCommand();
-            cmdCheck.CommandText = "SELECT streak_estudos, data_ultima_ofensiva FROM USUARIO WHERE id_usuario = $uid";
-            cmdCheck.Parameters.AddWithValue("$uid", userId);
-            using var r = cmdCheck.ExecuteReader();
-            if (r.Read()) {
-                int streak = r.GetInt32(0);
-                string ultimaData = r.IsDBNull(1) ? "" : r.GetString(1);
-                
-                if (ultimaData != hojeData) { // Se ainda não ganhou ofensiva hoje
-                    string ontemData = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd");
+            if (horasConcluidas >= 0.5) { 
+                var cmdCheck = db.CreateCommand();
+                cmdCheck.CommandText = "SELECT streak_estudos, data_ultima_ofensiva FROM USUARIO WHERE id_usuario = $uid";
+                cmdCheck.Parameters.AddWithValue("$uid", userId);
+                using var r = cmdCheck.ExecuteReader();
+                if (r.Read()) {
+                    int streak = r.GetInt32(0);
+                    string ultimaData = r.IsDBNull(1) ? "" : r.GetString(1);
                     
-                    if (ultimaData == ontemData) streak++; // Estudou ontem? Aumenta!
-                    else streak = 1; // Quebrou a sequência? Volta pra 1.
+                    if (ultimaData != hojeData) { 
+                        string ontemData = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd");
+                        if (ultimaData == ontemData) streak++; 
+                        else streak = 1; 
 
-                    r.Close();
-                    var cmdUp = db.CreateCommand();
-                    cmdUp.CommandText = "UPDATE USUARIO SET streak_estudos = $s, data_ultima_ofensiva = $d WHERE id_usuario = $uid";
-                    cmdUp.Parameters.AddWithValue("$s", streak);
-                    cmdUp.Parameters.AddWithValue("$d", hojeData);
-                    cmdUp.Parameters.AddWithValue("$uid", userId);
-                    cmdUp.ExecuteNonQuery();
+                        r.Close();
+                        var cmdUp = db.CreateCommand();
+                        cmdUp.CommandText = "UPDATE USUARIO SET streak_estudos = $s, data_ultima_ofensiva = $d WHERE id_usuario = $uid";
+                        cmdUp.Parameters.AddWithValue("$s", streak);
+                        cmdUp.Parameters.AddWithValue("$d", hojeData);
+                        cmdUp.Parameters.AddWithValue("$uid", userId);
+                        cmdUp.ExecuteNonQuery();
+                    }
                 }
             }
         }

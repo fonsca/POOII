@@ -23,8 +23,6 @@ function renderNewStudent(mentor) {
             </button>
           </div>
         </div>
-
-        <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea name="notes" rows="3" placeholder="Anotações sobre o aluno..."></textarea></div>
         <div style="grid-column:1/-1;display:flex;gap:1rem;align-items:center;margin-top:1rem;">
           <button class="btn" style="max-width:200px">Cadastrar aluno</button>
           <a href="#/admin" style="color:#666; text-decoration:none; font-weight:500;">Cancelar</a>

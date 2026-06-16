@@ -1,23 +1,22 @@
 // -------- TELA DO MENTOR DENTRO DO ALUNO, VENDO O PLANNER ETC --------
 async function renderStudent(mentor, id, semana = "") {
-  // 👉 A MÁGICA: Salva o mentor e a semana para os botões e para o Modal usarem!
   window.usuarioAtual = mentor;
-  window.semanaAtivaMentor = semana;
 
   try {
-    // 👉 ATUALIZADO: Busca os dados filtrando pela semana ativa
     const endpoint = semana ? `/students/${id}?semana=${semana}` : `/students/${id}`;
     const data = await api(endpoint);
     const { student } = data;
     let planner = data.planner || [];
     const semanaAtual = data.semanaAtual; // Recebe a semana exata do C#
+    
+    // 👉 Memorizando a data atualizada
+    window.semanaAtivaMentor = semanaAtual;
 
     const avatarHtml = student.foto 
       ? `<img src="${student.foto}" class="avatar" style="width:54px; height:54px; object-fit: cover; border-radius: 50%;" />`
       : `<div class="avatar" style="width:54px; height:54px; font-size:1.1rem">${initials(student.name)}</div>`;
 
     const navSemanaHtml = `
-      
       <div style="background: white; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border); text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
         <strong style="color: var(--navy); font-size: 1.15rem; display: block; margin-bottom: 12px;">
           📅 ${formatarLabelSemana(semanaAtual)}
@@ -72,7 +71,6 @@ async function renderStudent(mentor, id, semana = "") {
         if (!target) return;
         const action = target.dataset.action;
         
-        // Acha a tarefa correta baseada no ID clicado
         const task = action === 'edit' ? planner.find(p => String(p.id) === String(target.dataset.id)) : null;
 
         showPlannerModal({
@@ -80,10 +78,9 @@ async function renderStudent(mentor, id, semana = "") {
           day: target.dataset.day || (task ? task.day : ''),
           time: target.dataset.time || (task ? task.time : ''),
           task: task,
+          semanaDaTela: semanaAtual, // 👉 AQUI: Passando a semana garantida para o Modal
           onSave: async (formData, mDay, mTime) => {
             try {
-              // 👉 BLINDAGEM ATUALIZADA: Permite que você apague os textos se quiser
-              // 👉 BLINDAGEM CORRIGIDA: Agora enviamos a semana exata para o C#
               const payload = { 
                 subject: formData.subject !== undefined ? formData.subject : (task ? task.subject : ''),
                 topic: formData.topic !== undefined ? formData.topic : (task ? task.topic : ''),
@@ -93,7 +90,8 @@ async function renderStudent(mentor, id, semana = "") {
                 done: task ? task.done : false, 
                 hours: 1, 
                 userId: id,
-                data_semana: formData.data_semana || (task ? task.data_semana : window.semanaAtivaMentor)
+                // 👉 AQUI: Puxando do formData que o modal já montou corretamente
+                data_semana: formData.data_semana 
               };
 
               if (action === 'create') {

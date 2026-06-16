@@ -1,6 +1,7 @@
 // -------- POPUP DO PLANNER --------
+// 👉 ADICIONADO 'semanaDaTela' AQUI NOS PARÂMETROS DA FUNÇÃO
 function showPlannerModal(params) {
-  const { mode, task, day, time, onSave, onDelete, onToggle } = params;
+  const { mode, task, day, time, onSave, onDelete, onToggle, semanaDaTela } = params;
   
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -118,11 +119,11 @@ function showPlannerModal(params) {
 
       // EVENTO: INICIAR
       btnIniciar.onclick = (e) => {
-        e.preventDefault(); // Impede o recarregamento
+        e.preventDefault(); 
         e.stopPropagation();
         
         btnIniciar.style.display = 'none';
-        btnZerar.style.display = 'none'; // Esconde o zerar enquanto roda
+        btnZerar.style.display = 'none'; 
         btnParar.style.display = 'inline-block';
         
         timerInterval = setInterval(() => {
@@ -133,24 +134,23 @@ function showPlannerModal(params) {
 
       // EVENTO: PARAR
       btnParar.onclick = async (e) => {
-        e.preventDefault(); // Impede o recarregamento da tela!
+        e.preventDefault(); 
         e.stopPropagation();
         
         clearInterval(timerInterval); 
         btnParar.style.display = 'none';
         btnIniciar.style.display = 'inline-block';
-        btnZerar.style.display = 'inline-block'; // Mostra o zerar novamente
+        btnZerar.style.display = 'inline-block'; 
         btnIniciar.innerText = '▶ Continuar'; 
 
         display.innerText = formatarTempo(segundosAcumulados);
 
         try {
-          // Salva no banco em silêncio
           await api(`/planner/${task.id}`, { 
             method: 'PUT',
             body: JSON.stringify({ tempo_gasto: segundosAcumulados })
           });
-          task.tempo_gasto_segundos = segundosAcumulados; // Grava na memória
+          task.tempo_gasto_segundos = segundosAcumulados; 
         } catch (err) {
           console.error("Erro ao sincronizar cronômetro:", err.message);
         }
@@ -158,7 +158,7 @@ function showPlannerModal(params) {
 
       // EVENTO: ZERAR
       btnZerar.onclick = async (e) => {
-        e.preventDefault(); // Impede o recarregamento
+        e.preventDefault(); 
         e.stopPropagation();
 
         if (!confirm("Tem certeza que deseja zerar o tempo deste estudo?")) return;
@@ -173,7 +173,7 @@ function showPlannerModal(params) {
             method: 'PUT',
             body: JSON.stringify({ tempo_gasto: 0 })
           });
-          task.tempo_gasto_segundos = 0; // Zera na memória
+          task.tempo_gasto_segundos = 0; 
         } catch (err) {
           console.error("Erro ao zerar cronômetro:", err.message);
         }
@@ -183,7 +183,6 @@ function showPlannerModal(params) {
 
   // --- LÓGICA DOS BOTÕES DE SALVAR/EDITAR/CONCLUIR ---
   if (isMentor) {
-    // 👉 CORREÇÃO 1: Adicionando a vida ao botão de EXCLUIR!
     const deleteBtn = overlay.querySelector('#modal-delete-btn');
     if (deleteBtn) {
       deleteBtn.onclick = async (e) => {
@@ -193,13 +192,11 @@ function showPlannerModal(params) {
         deleteBtn.textContent = "Excluindo...";
         deleteBtn.disabled = true;
         
-        // Chama a função de deletar que está lá no renderStudent
         await onDelete();
         closeModal(); 
       };
     }
 
-    // A lógica de Salvar continua igual...
     overlay.querySelector('#modal-form').onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -210,7 +207,10 @@ function showPlannerModal(params) {
 
       try {
         const payload = Object.fromEntries(fd);
-        payload.data_semana = window.semanaAtivaMentor || ""; 
+        
+        // 👉 A BLINDAGEM MÁXIMA AQUI: Usando o parâmetro direto e não o window!
+        payload.data_semana = task ? task.data_semana : semanaDaTela; 
+        
         await onSave(payload, dayText, timeText, task?.id);
         closeModal();
       } catch (err) {

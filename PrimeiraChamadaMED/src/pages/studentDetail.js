@@ -14,7 +14,7 @@ async function renderStudent(mentor, id, semana = "") {
 
     const avatarHtml = student.foto 
       ? `<img src="${student.foto}" class="avatar" style="width:54px; height:54px; object-fit: cover; border-radius: 50%;" />`
-      : `<div class="avatar" style="width:54px; height:54px; font-size:1.1rem">${initials(student.name)}</div>`;
+      : `<div class="avatar" style="width:54px; height:54px; font-size:1.1rem">${initials(student.name)}</div>` ;
 
     const navSemanaHtml = `
       <div style="background: white; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border); text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">

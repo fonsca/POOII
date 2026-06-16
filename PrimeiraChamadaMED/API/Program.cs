@@ -193,50 +193,36 @@ app.MapGet("/api/students", (long mentorId) => {
     }
 });
 
-// POST /api/planner
+// POST /api/planner (Criação de um novo bloco de estudo)
 app.MapPost("/api/planner", async (HttpRequest request) => {
     try {
         using var body = await JsonDocument.ParseAsync(request.Body);
         var root = body.RootElement;
-        
-        // Pega os dados básicos
-        long userId = root.GetProperty("userId").GetInt64();
-        string day = root.GetProperty("day").GetString() ?? "";
-        string subject = root.GetProperty("subject").GetString() ?? "";
-        string topic = root.GetProperty("topic").GetString() ?? "";
-        string time = root.GetProperty("time").GetString() ?? "";
-        string subtopics = root.GetProperty("subtopics").GetString() ?? "";
-        
-        // 👉 ATUALIZADO: Pega a semana do Javascript (ou calcula hoje se vier vazio)
-        string dataSemana = "";
-        if (root.TryGetProperty("data_semana", out var semanaProp)) {
-            dataSemana = semanaProp.GetString() ?? "";
-        }
-        if (string.IsNullOrEmpty(dataSemana)) {
-            DateTime hoje = DateTime.Now;
-            int diff = (7 + (hoje.DayOfWeek - DayOfWeek.Monday)) % 7;
-            dataSemana = hoje.AddDays(-1 * diff).ToString("yyyy-MM-dd");
-        }
-
         using var db = OpenDb();
+
         var cmd = db.CreateCommand();
-        // 👉 ATUALIZADO: Inserindo a coluna data_semana
+        // 👉 Comando SQL completo com todos os campos necessários
         cmd.CommandText = @"INSERT INTO PLANNER_ITEM 
-                    (id_usuario, subject, topic, subtopics, day, time, hours, done, data_semana) 
-                    VALUES 
-                    ($uid, $sub, $top, $subtop, $day, $time, $hours, $done, $semana);
-            SELECT last_insert_rowid();";
-            
-        cmd.Parameters.AddWithValue("$uid", userId);
-        cmd.Parameters.AddWithValue("$day", day);
-        cmd.Parameters.AddWithValue("$subject", subject);
-        cmd.Parameters.AddWithValue("$topic", topic);
-        cmd.Parameters.AddWithValue("$time", time);
-        cmd.Parameters.AddWithValue("$subtopics", subtopics);
-        cmd.Parameters.AddWithValue("$semana", root.TryGetProperty("data_semana", out var sem) ? sem.GetString() ?? "" : "");
+                            (id_usuario, subject, topic, subtopics, day, time, hours, done, data_semana) 
+                            VALUES 
+                            ($uid, $sub, $top, $subtop, $day, $time, $hours, $done, $semana)";
+
+        // 👉 Conectando as variáveis do SQL com os dados recebidos do JavaScript
+        cmd.Parameters.AddWithValue("$uid", root.TryGetProperty("userId", out var uid) ? uid.GetInt64() : 0);
+        cmd.Parameters.AddWithValue("$sub", root.TryGetProperty("subject", out var sub) ? sub.GetString() ?? "" : "");
+        cmd.Parameters.AddWithValue("$top", root.TryGetProperty("topic", out var top) ? top.GetString() ?? "" : "");
+        cmd.Parameters.AddWithValue("$subtop", root.TryGetProperty("subtopics", out var subtop) ? subtop.GetString() ?? "" : "");
+        cmd.Parameters.AddWithValue("$day", root.TryGetProperty("day", out var day) ? day.GetString() ?? "" : "");
+        cmd.Parameters.AddWithValue("$time", root.TryGetProperty("time", out var time) ? time.GetString() ?? "" : "");
+        cmd.Parameters.AddWithValue("$hours", root.TryGetProperty("hours", out var hrs) ? hrs.GetDouble() : 1.0);
+        cmd.Parameters.AddWithValue("$done", root.TryGetProperty("done", out var done) && done.ValueKind == JsonValueKind.True ? 1 : 0);
         
-        var newId = (long)cmd.ExecuteScalar()!;
-        return Results.Ok(new { id = newId });
+        // 👉 A semana que resolve o erro grave das datas se misturarem
+        cmd.Parameters.AddWithValue("$semana", root.TryGetProperty("data_semana", out var sem) ? sem.GetString() ?? "" : "");
+
+        cmd.ExecuteNonQuery();
+        
+        return Results.Created("", new { mensagem = "Bloco criado com sucesso!" });
     } catch (Exception ex) {
         return Results.Json(new { mensagem = ex.Message }, statusCode: 500);
     }

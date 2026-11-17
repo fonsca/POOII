@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\davix\\Documents\\Estudos\\UVV\\PrimeriaChamada_01\\POOII-main\\POOII-main\\PrimeiraChamadaMED\\API\\API.csproj": {}
+    "C:\\Users\\davix\\Documents\\GitHub\\POOII\\PrimeiraChamadaMED\\API\\API.csproj": {}
   },
   "projects": {
-    "C:\\Users\\davix\\Documents\\Estudos\\UVV\\PrimeriaChamada_01\\POOII-main\\POOII-main\\PrimeiraChamadaMED\\API\\API.csproj": {
+    "C:\\Users\\davix\\Documents\\GitHub\\POOII\\PrimeiraChamadaMED\\API\\API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\davix\\Documents\\Estudos\\UVV\\PrimeriaChamada_01\\POOII-main\\POOII-main\\PrimeiraChamadaMED\\API\\API.csproj",
+        "projectUniqueName": "C:\\Users\\davix\\Documents\\GitHub\\POOII\\PrimeiraChamadaMED\\API\\API.csproj",
         "projectName": "API",
-        "projectPath": "C:\\Users\\davix\\Documents\\Estudos\\UVV\\PrimeriaChamada_01\\POOII-main\\POOII-main\\PrimeiraChamadaMED\\API\\API.csproj",
+        "projectPath": "C:\\Users\\davix\\Documents\\GitHub\\POOII\\PrimeiraChamadaMED\\API\\API.csproj",
         "packagesPath": "C:\\Users\\davix\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\davix\\Documents\\Estudos\\UVV\\PrimeriaChamada_01\\POOII-main\\POOII-main\\PrimeiraChamadaMED\\API\\obj\\",
+        "outputPath": "C:\\Users\\davix\\Documents\\GitHub\\POOII\\PrimeiraChamadaMED\\API\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\davix\\AppData\\Roaming\\NuGet\\NuGet.Config"

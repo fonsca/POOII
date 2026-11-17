@@ -1,56 +1,69 @@
-// -------- /admin/novo-aluno --------
+// -------- Cadastro de aluno (mentor) --------
 function renderNewStudent(mentor) {
-  const pageContent = `
-    <a href="#/admin" style="display:inline-block; margin-bottom:1rem; color:var(--navy); text-decoration:none; font-weight:bold;">← Voltar para alunos</a>
-    <section class="section">
-      <h2 style="margin-bottom:0.5rem">Cadastrar novo aluno</h2>
-      <p class="muted" style="margin-bottom:1.5rem">
-        Preencha os dados do aluno. Ao definir uma <b>senha inicial</b>, o aluno também receberá um login para acessar o sistema.
-      </p>
-      <form id="new-student" class="grid-form">
-        <div class="field"><label>Nome *</label><input name="name" required placeholder="Ex.: João Silva" /></div>
-        <div class="field"><label>E-mail *</label><input name="email" type="email" required placeholder="Ex.: joao@gmail.com" /></div>
-        <div class="field"><label>Curso / Objetivo *</label><input name="course" required placeholder="Ex.: Medicina USP" /></div>
-        
-        <div class="field"><label>Telefone</label><input type="text" name="phone" id="phone" placeholder="(00) 00000-0000" oninput="applyPhoneMask(this)" required /></div>
-        
-        <div class="field"><label>Data de nascimento</label><input name="birthDate" type="date" /></div>
-        
-        <div class="field">
-          <label>Senha inicial do aluno</label>
-          <div style="position: relative; display: flex; align-items: center;">
-            <input name="initialPassword" id="new-pwd" type="password" minlength="4" placeholder="Mínimo 4 caracteres (opcional)" style="width: 100%; padding-right: 2.5rem;" />
-            <button type="button" onclick="togglePwd('new-pwd', this)" class="pwd-toggle-btn" title="Mostrar/Ocultar senha">
-              <img src="img/olho-aberto.png" alt="Olho" class="eye-img" />
-            </button>
+  renderPage(mentor, `
+    <a href="#/admin" class="btn btn-link px-0 mb-3">← Voltar para alunos</a>
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h1 class="h4 text-navy">Cadastrar novo aluno</h1>
+        <p class="text-body-secondary">Preencha os dados e defina a senha inicial que o aluno vai usar para entrar.</p>
+
+        <form id="new-student-form" class="row g-3" novalidate>
+          <div class="col-12"><div class="alert alert-danger d-none mb-0" data-form-alert></div></div>
+          <div class="col-md-6" data-field>
+            <label class="form-label" for="ns-name">Nome *</label>
+            <input class="form-control" id="ns-name" name="name" maxlength="100" placeholder="Ex.: João Silva" />
           </div>
-        </div>
-        <div style="grid-column:1/-1;display:flex;gap:1rem;align-items:center;margin-top:1rem;">
-          <button class="btn" style="max-width:200px">Cadastrar aluno</button>
-          <a href="#/admin" style="color:#666; text-decoration:none; font-weight:500;">Cancelar</a>
-        </div>
-        <p id="student-msg" class="error" style="grid-column:1/-1"></p>
-      </form>
-    </section>
-  `;
+          <div class="col-md-6" data-field>
+            <label class="form-label" for="ns-email">E-mail *</label>
+            <input type="email" class="form-control" id="ns-email" name="email" maxlength="150" placeholder="joao@gmail.com" />
+          </div>
+          <div class="col-md-6" data-field>
+            <label class="form-label" for="ns-course">Curso / objetivo *</label>
+            <input class="form-control" id="ns-course" name="course" maxlength="100" placeholder="Ex.: Medicina USP" />
+          </div>
+          <div class="col-md-6" data-field>
+            <label class="form-label" for="ns-phone">Telefone (WhatsApp)</label>
+            <input type="tel" class="form-control" id="ns-phone" name="phone" placeholder="(00) 00000-0000" />
+          </div>
+          <div class="col-md-6" data-field>
+            <label class="form-label" for="ns-birth">Data de nascimento</label>
+            <input type="date" class="form-control" id="ns-birth" name="birthDate" />
+          </div>
+          <div class="col-md-6" data-field>
+            <label class="form-label" for="ns-password">Senha inicial *</label>
+            ${passwordInputHtml({ id: "ns-password", name: "initialPassword", placeholder: "Mínimo 6 caracteres", autocomplete: "new-password" })}
+          </div>
+          <div class="col-12" data-field>
+            <label class="form-label" for="ns-notes">Observações</label>
+            <textarea class="form-control" id="ns-notes" name="notes" rows="2" maxlength="500"></textarea>
+          </div>
+          <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-navy">Cadastrar aluno</button>
+            <a href="#/admin" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>`);
 
-  root.innerHTML = layoutHtml(mentor, pageContent);
-  bindHeader();
+  const form = document.getElementById("new-student-form");
+  bindPasswordToggles(form);
+  form.elements.phone.addEventListener("input", (event) => applyPhoneMask(event.target));
 
-  document.getElementById("new-student").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const msg = document.getElementById("student-msg");
-    msg.textContent = "";
-    const fd = new FormData(e.target);
-    const payload = { mentorId: mentor.id, ...Object.fromEntries(fd) };
-    ["phone", "birthDate", "notes", "initialPassword"].forEach(k => {
-      if (!payload[k]) delete payload[k];
-    });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = form.querySelector('[type="submit"]');
+    const payload = { mentorId: mentor.id, ...Object.fromEntries(new FormData(form)) };
+    // Campos opcionais vazios não são enviados
+    ["phone", "birthDate", "notes"].forEach(key => { if (!payload[key]) delete payload[key]; });
+
+    clearFormErrors(form);
+    setBusy(button, true);
     try {
       await api("/students", { method: "POST", body: JSON.stringify(payload) });
       navigate("#/admin");
     } catch (err) {
-      msg.textContent = err.message || "Não foi possível cadastrar o aluno.";
+      showFormErrors(form, err);
+      setBusy(button, false);
     }
   });
 }

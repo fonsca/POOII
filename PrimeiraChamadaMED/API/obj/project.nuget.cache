@@ -1,15 +1,23 @@
 {
   "version": 2,
-  "dgSpecHash": "LmaWde6IyKA=",
+  "dgSpecHash": "mW2lZqD4gN0=",
   "success": true,
-  "projectFilePath": "C:\\Users\\Cliente\\Documents\\UVV\\4º PERÍODO\\POO II\\POOII\\PrimeiraChamadaMED\\API\\API.csproj",
+  "projectFilePath": "C:\\Users\\davix\\Documents\\Estudos\\UVV\\PrimeriaChamada_01\\POOII-main\\POOII-main\\PrimeiraChamadaMED\\API\\API.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\Cliente\\.nuget\\packages\\microsoft.data.sqlite\\8.0.0\\microsoft.data.sqlite.8.0.0.nupkg.sha512",
-    "C:\\Users\\Cliente\\.nuget\\packages\\microsoft.data.sqlite.core\\8.0.0\\microsoft.data.sqlite.core.8.0.0.nupkg.sha512",
-    "C:\\Users\\Cliente\\.nuget\\packages\\sqlitepclraw.bundle_e_sqlite3\\2.1.6\\sqlitepclraw.bundle_e_sqlite3.2.1.6.nupkg.sha512",
-    "C:\\Users\\Cliente\\.nuget\\packages\\sqlitepclraw.core\\2.1.6\\sqlitepclraw.core.2.1.6.nupkg.sha512",
-    "C:\\Users\\Cliente\\.nuget\\packages\\sqlitepclraw.lib.e_sqlite3\\2.1.6\\sqlitepclraw.lib.e_sqlite3.2.1.6.nupkg.sha512",
-    "C:\\Users\\Cliente\\.nuget\\packages\\sqlitepclraw.provider.e_sqlite3\\2.1.6\\sqlitepclraw.provider.e_sqlite3.2.1.6.nupkg.sha512"
+    "C:\\Users\\davix\\.nuget\\packages\\dotnetenv\\3.2.0\\dotnetenv.3.2.0.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.data.sqlite.core\\10.0.15\\microsoft.data.sqlite.core.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.entityframeworkcore\\10.0.15\\microsoft.entityframeworkcore.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.entityframeworkcore.abstractions\\10.0.15\\microsoft.entityframeworkcore.abstractions.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.entityframeworkcore.analyzers\\10.0.15\\microsoft.entityframeworkcore.analyzers.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.entityframeworkcore.relational\\10.0.15\\microsoft.entityframeworkcore.relational.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.entityframeworkcore.sqlite\\10.0.15\\microsoft.entityframeworkcore.sqlite.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.entityframeworkcore.sqlite.core\\10.0.15\\microsoft.entityframeworkcore.sqlite.core.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\microsoft.extensions.dependencymodel\\10.0.15\\microsoft.extensions.dependencymodel.10.0.15.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\sqlitepclraw.bundle_e_sqlite3\\2.1.13\\sqlitepclraw.bundle_e_sqlite3.2.1.13.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\sqlitepclraw.core\\2.1.13\\sqlitepclraw.core.2.1.13.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\sqlitepclraw.lib.e_sqlite3\\2.1.13\\sqlitepclraw.lib.e_sqlite3.2.1.13.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\sqlitepclraw.provider.e_sqlite3\\2.1.13\\sqlitepclraw.provider.e_sqlite3.2.1.13.nupkg.sha512",
+    "C:\\Users\\davix\\.nuget\\packages\\superpower\\3.0.0\\superpower.3.0.0.nupkg.sha512"
   ],
   "logs": []
 }

@@ -1,3 +1,18 @@
+# .NET
 bin/
-
 obj/
+.vs/
+*.user
+TestResults/
+
+# Node / Vite
+node_modules/
+dist/
+
+# Configuração local (segredos)
+.env
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/
